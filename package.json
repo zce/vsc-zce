@@ -1,5 +1,6 @@
 {
   "name": "zce",
+  "icon": "icon.png",
   "displayName": "zce",
   "publisher": "zce",
   "description": "zce's personal commands",
