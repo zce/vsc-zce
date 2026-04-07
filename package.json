@@ -1,0 +1,97 @@
+{
+  "name": "zce",
+  "displayName": "zce",
+  "description": "zce's personal commands",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "zce.dotnet.restore",
+        "title": "dotnet restore",
+        "category": "ZCE .NET"
+      },
+      {
+        "command": "zce.dotnet.build",
+        "title": "dotnet build",
+        "category": "ZCE .NET"
+      },
+      {
+        "command": "zce.dotnet.clean",
+        "title": "dotnet clean",
+        "category": "ZCE .NET"
+      },
+      {
+        "command": "zce.dotnet.test",
+        "title": "dotnet test",
+        "category": "ZCE .NET"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "zce.submenu.dotnet",
+        "label": "ZCE .NET"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "submenu": "zce.submenu.dotnet",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@100"
+        }
+      ],
+      "zce.submenu.dotnet": [
+        {
+          "command": "zce.dotnet.restore",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "zce.dotnet.build",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "zce.dotnet.clean",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "zce.dotnet.test",
+          "when": "explorerResourceIsFolder"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "~25.5.2",
+    "@types/vscode": "^1.110.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.2.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.0"
+  }
+}
