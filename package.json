@@ -1,8 +1,12 @@
 {
   "name": "zce",
   "displayName": "zce",
+  "publisher": "zce",
   "description": "zce's personal commands",
   "version": "0.0.1",
+  "repository": "zce/vsc-zce",
+  "license": "MIT",
+  "author": "zce <w@zce.me> (https://zce.me)",
   "engines": {
     "vscode": "^1.110.0"
   },
