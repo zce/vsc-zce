@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { createDotnetFolderCommands } from '../commands/dotnetFolderCommands';
+import { createDotnetCommands } from '../modules/dotnet';
 
 suite('Dotnet Folder Commands', () => {
 	test('uses selected folder when it already contains a .csproj', async () => {
@@ -21,7 +21,7 @@ suite('Dotnet Folder Commands', () => {
 			},
 		};
 
-		const commands = createDotnetFolderCommands(
+		const commands = createDotnetCommands(
 			runner as any,
 			locator as any,
 		);
@@ -59,7 +59,7 @@ suite('Dotnet Folder Commands', () => {
 			},
 		};
 
-		const commands = createDotnetFolderCommands(
+		const commands = createDotnetCommands(
 			runner as any,
 			locator as any,
 		);
@@ -92,7 +92,7 @@ suite('Dotnet Folder Commands', () => {
 			},
 		};
 
-		const commands = createDotnetFolderCommands(
+		const commands = createDotnetCommands(
 			runner as any,
 			locator as any,
 		);
@@ -122,7 +122,7 @@ suite('Dotnet Folder Commands', () => {
 			},
 		};
 
-		const commands = createDotnetFolderCommands(
+		const commands = createDotnetCommands(
 			runner as any,
 			locator as any,
 		);
