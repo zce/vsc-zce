@@ -1,38 +1,43 @@
 # zce
 
-Personal VS Code commands for .NET folder workflows.
+Personal VS Code commands for daily workflows.
 
 ## Features
 
-- Adds a folder context submenu named ZCE .NET in Explorer.
-- Supports these commands on a selected folder:
-	- dotnet restore
-	- dotnet build
-	- dotnet clean
-	- dotnet test
-- Resolves the execution folder by searching upward for the nearest directory that contains a `.csproj` file.
-- If no `.csproj` is found upward, runs in the selected folder.
+### Editor: Copy Location
 
-## Usage
+Copy the current cursor position (file path + line number) to the clipboard. Useful for writing prompts in AI agents.
 
-1. In Explorer, right-click a folder.
-2. Select ZCE .NET.
-3. Choose the command to run.
+- **Shortcut**: `Ctrl+Shift+C` (Windows/Linux) / `Cmd+Shift+C` (macOS)
+- **Context menu**: Right-click in any editor → **Copy Location**
+- Single line: `src/extension.ts:14`
+- Multi-line selection: `src/extension.ts:14-20`
+
+### .NET Folder Commands
+
+Adds a **ZCE .NET** submenu in the Explorer context menu for running dotnet commands on a selected folder.
+
+- `dotnet restore`
+- `dotnet build`
+- `dotnet clean`
+- `dotnet test`
+
+Automatically resolves the nearest parent directory containing a `.csproj` file. Falls back to the selected folder if none is found.
 
 ## Requirements
 
-- .NET SDK installed and available in PATH.
-- Local file system folders (non-local resources are not supported).
-
-## Extension Settings
-
-This extension currently does not contribute custom settings.
-
-## Known Issues
-
-- Multi-root workspace behavior follows the selected folder path only.
+- .NET SDK installed and available in PATH (for .NET commands).
+- Local file system folders only.
 
 ## Release Notes
+
+### 0.0.4
+
+- Added **Copy Location** command (`zce.copyLocation`) with editor context menu and keyboard shortcut.
+
+### 0.0.3
+
+- Internal refactor: modular architecture with `ExtensionModule` interface.
 
 ### 0.0.1
 
