@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { ReviewNoteRange } from './types';
+import { ReviewRange } from './types';
 
-export function rangesEqual(a: ReviewNoteRange, b: ReviewNoteRange): boolean {
+export function rangesEqual(a: ReviewRange, b: ReviewRange): boolean {
 	return (
 		a.startLine === b.startLine &&
 		a.startChar === b.startChar &&
@@ -50,9 +50,9 @@ function translatePosition(
 }
 
 export function applyContentChangesToRange(
-	range: ReviewNoteRange,
+	range: ReviewRange,
 	changes: readonly vscode.TextDocumentContentChangeEvent[],
-): ReviewNoteRange {
+): ReviewRange {
 	let start = new vscode.Position(range.startLine, range.startChar);
 	let end = new vscode.Position(range.endLine, range.endChar);
 

@@ -4,12 +4,12 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getStoragePathForFolder } from './config';
 import { rangesEqual } from './rangeTracking';
-import { ReviewFile, ReviewNote, ReviewNoteRange } from './types';
+import { ReviewDocument, ReviewRange, ReviewThread } from './types';
 
 export class ReviewStorage {
 	private readonly listeners = new Set<() => void>();
-	private readonly cacheByFolder = new Map<string, ReviewNote[]>();
-	private readonly noteById = new Map<string, ReviewNote>();
+	private readonly cacheByFolder = new Map<string, ReviewThread[]>();
+	private readonly threadById = new Map<string, ReviewThread>();
 
 	onDidChange(listener: () => void): vscode.Disposable {
 		this.listeners.add(listener);
@@ -18,7 +18,7 @@ export class ReviewStorage {
 
 	clearCache(): void {
 		this.cacheByFolder.clear();
-		this.noteById.clear();
+		this.threadById.clear();
 	}
 
 	private fireChange(): void {
@@ -35,10 +35,22 @@ export class ReviewStorage {
 		return getStoragePathForFolder(workspaceFolder);
 	}
 
-	private indexFolderNotes(notes: readonly ReviewNote[]): void {
-		for (const note of notes) {
-			this.noteById.set(note.id, note);
+	private indexFolderThreads(threads: readonly ReviewThread[]): void {
+		for (const thread of threads) {
+			this.threadById.set(thread.id, thread);
 		}
+	}
+
+	private parseStoredComments(raw: unknown): ReviewThread[] {
+		if (Array.isArray(raw)) {
+			return raw as ReviewThread[];
+		}
+
+		if (raw && typeof raw === 'object' && 'comments' in raw) {
+			return (raw as ReviewDocument).comments ?? [];
+		}
+
+		return [];
 	}
 
 	findWorkspaceFolderForRelativePath(
@@ -58,27 +70,27 @@ export class ReviewStorage {
 		return vscode.workspace.workspaceFolders?.[0];
 	}
 
-	resolveWorkspaceFolder(note: ReviewNote): vscode.WorkspaceFolder | undefined {
-		return this.findWorkspaceFolderForRelativePath(note.file);
+	resolveWorkspaceFolder(thread: ReviewThread): vscode.WorkspaceFolder | undefined {
+		return this.findWorkspaceFolderForRelativePath(thread.file);
 	}
 
-	async loadAll(): Promise<ReviewNote[]> {
+	async loadAll(): Promise<ReviewThread[]> {
 		const folders = vscode.workspace.workspaceFolders;
 		if (!folders?.length) {
 			return [];
 		}
 
-		const notes: ReviewNote[] = [];
+		const threads: ReviewThread[] = [];
 		for (const folder of folders) {
-			notes.push(...(await this.loadForFolder(folder)));
+			threads.push(...(await this.loadForFolder(folder)));
 		}
 
-		return notes.sort(
+		return threads.sort(
 			(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
 		);
 	}
 
-	async loadForFolder(workspaceFolder: vscode.WorkspaceFolder): Promise<ReviewNote[]> {
+	async loadForFolder(workspaceFolder: vscode.WorkspaceFolder): Promise<ReviewThread[]> {
 		const key = this.folderKey(workspaceFolder);
 		const cached = this.cacheByFolder.get(key);
 		if (cached) {
@@ -89,16 +101,16 @@ export class ReviewStorage {
 
 		try {
 			const raw = await fs.readFile(storagePath, 'utf8');
-			const parsed = JSON.parse(raw) as ReviewFile | ReviewNote[];
-			const notes = Array.isArray(parsed) ? parsed : (parsed.notes ?? []);
-			this.cacheByFolder.set(key, notes);
-			this.indexFolderNotes(notes);
-			return notes;
+			const parsed = JSON.parse(raw) as unknown;
+			const comments = this.parseStoredComments(parsed);
+			this.cacheByFolder.set(key, comments);
+			this.indexFolderThreads(comments);
+			return comments;
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-				const notes: ReviewNote[] = [];
-				this.cacheByFolder.set(key, notes);
-				return notes;
+				const comments: ReviewThread[] = [];
+				this.cacheByFolder.set(key, comments);
+				return comments;
 			}
 			throw error;
 		}
@@ -106,70 +118,70 @@ export class ReviewStorage {
 
 	async saveForFolder(
 		workspaceFolder: vscode.WorkspaceFolder,
-		notes: ReviewNote[],
+		threads: ReviewThread[],
 	): Promise<void> {
 		const key = this.folderKey(workspaceFolder);
 		const previous = this.cacheByFolder.get(key);
 		if (previous) {
-			for (const note of previous) {
-				this.noteById.delete(note.id);
+			for (const thread of previous) {
+				this.threadById.delete(thread.id);
 			}
 		}
 
-		this.cacheByFolder.set(key, notes);
-		this.indexFolderNotes(notes);
+		this.cacheByFolder.set(key, threads);
+		this.indexFolderThreads(threads);
 
 		const storagePath = this.getStoragePath(workspaceFolder);
 		await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
-		const payload: ReviewFile = { notes };
+		const payload: ReviewDocument = { comments: threads };
 		await fs.writeFile(storagePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
 		this.fireChange();
 	}
 
-	async addNote(note: ReviewNote, documentUri: vscode.Uri): Promise<void> {
+	async addThread(thread: ReviewThread, documentUri: vscode.Uri): Promise<void> {
 		const workspaceFolder = vscode.workspace.getWorkspaceFolder(documentUri);
 		if (!workspaceFolder) {
 			throw new Error('File is not inside a workspace folder.');
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
-		notes.unshift(note);
-		await this.saveForFolder(workspaceFolder, notes);
+		const threads = await this.loadForFolder(workspaceFolder);
+		threads.unshift(thread);
+		await this.saveForFolder(workspaceFolder, threads);
 	}
 
-	async removeNote(note: ReviewNote): Promise<void> {
-		const workspaceFolder = this.resolveWorkspaceFolder(note);
+	async removeThread(thread: ReviewThread): Promise<void> {
+		const workspaceFolder = this.resolveWorkspaceFolder(thread);
 		if (!workspaceFolder) {
 			return;
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
-		const nextNotes = notes.filter((item) => item.id !== note.id);
-		await this.saveForFolder(workspaceFolder, nextNotes);
+		const threads = await this.loadForFolder(workspaceFolder);
+		const nextThreads = threads.filter((item) => item.id !== thread.id);
+		await this.saveForFolder(workspaceFolder, nextThreads);
 	}
 
-	async updateNote(note: ReviewNote): Promise<void> {
-		const workspaceFolder = this.resolveWorkspaceFolder(note);
+	async updateThread(thread: ReviewThread): Promise<void> {
+		const workspaceFolder = this.resolveWorkspaceFolder(thread);
 		if (!workspaceFolder) {
 			return;
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
-		const index = notes.findIndex((item) => item.id === note.id);
+		const threads = await this.loadForFolder(workspaceFolder);
+		const index = threads.findIndex((item) => item.id === thread.id);
 		if (index === -1) {
 			return;
 		}
 
-		notes[index] = note;
-		await this.saveForFolder(workspaceFolder, notes);
+		threads[index] = thread;
+		await this.saveForFolder(workspaceFolder, threads);
 	}
 
-	findById(id: string): ReviewNote | undefined {
-		return this.noteById.get(id);
+	findById(id: string): ReviewThread | undefined {
+		return this.threadById.get(id);
 	}
 
-	async ensureNoteLoaded(id: string): Promise<ReviewNote | undefined> {
+	async ensureThreadLoaded(id: string): Promise<ReviewThread | undefined> {
 		const cached = this.findById(id);
 		if (cached) {
 			return cached;
@@ -179,14 +191,14 @@ export class ReviewStorage {
 		return this.findById(id);
 	}
 
-	async loadForFile(relativePath: string): Promise<ReviewNote[]> {
+	async loadForFile(relativePath: string): Promise<ReviewThread[]> {
 		const workspaceFolder = this.findWorkspaceFolderForRelativePath(relativePath);
 		if (!workspaceFolder) {
 			return [];
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
-		return notes.filter((note) => note.file === relativePath);
+		const threads = await this.loadForFolder(workspaceFolder);
+		return threads.filter((thread) => thread.file === relativePath);
 	}
 
 	async resolveAllInFile(relativePath: string): Promise<number> {
@@ -195,16 +207,16 @@ export class ReviewStorage {
 			return 0;
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
+		const threads = await this.loadForFolder(workspaceFolder);
 		let changed = 0;
-		const nextNotes = notes.map((note) => {
-			if (note.file !== relativePath || note.resolved) {
-				return note;
+		const nextThreads = threads.map((thread) => {
+			if (thread.file !== relativePath || thread.resolved) {
+				return thread;
 			}
 
 			changed += 1;
 			return {
-				...note,
+				...thread,
 				resolved: true,
 				resolvedAt: new Date().toISOString(),
 			};
@@ -214,33 +226,33 @@ export class ReviewStorage {
 			return 0;
 		}
 
-		await this.saveForFolder(workspaceFolder, nextNotes);
+		await this.saveForFolder(workspaceFolder, nextThreads);
 		return changed;
 	}
 
-	async updateNoteRangesForFile(
+	async updateThreadRangesForFile(
 		relativePath: string,
-		rangesById: ReadonlyMap<string, ReviewNoteRange>,
+		rangesById: ReadonlyMap<string, ReviewRange>,
 	): Promise<boolean> {
 		const workspaceFolder = this.findWorkspaceFolderForRelativePath(relativePath);
 		if (!workspaceFolder) {
 			return false;
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
+		const threads = await this.loadForFolder(workspaceFolder);
 		let changed = false;
-		const next = notes.map((note) => {
-			if (note.file !== relativePath) {
-				return note;
+		const next = threads.map((thread) => {
+			if (thread.file !== relativePath) {
+				return thread;
 			}
 
-			const range = rangesById.get(note.id);
-			if (!range || rangesEqual(note.range, range)) {
-				return note;
+			const range = rangesById.get(thread.id);
+			if (!range || rangesEqual(thread.range, range)) {
+				return thread;
 			}
 
 			changed = true;
-			return { ...note, range };
+			return { ...thread, range };
 		});
 
 		if (!changed) {
@@ -257,9 +269,9 @@ export class ReviewStorage {
 			return 0;
 		}
 
-		const notes = await this.loadForFolder(workspaceFolder);
-		const remaining = notes.filter((note) => note.file !== relativePath);
-		const removed = notes.length - remaining.length;
+		const threads = await this.loadForFolder(workspaceFolder);
+		const remaining = threads.filter((thread) => thread.file !== relativePath);
+		const removed = threads.length - remaining.length;
 		if (removed === 0) {
 			return 0;
 		}
@@ -276,7 +288,7 @@ export class ReviewStorage {
 		return documentUri.fsPath;
 	}
 
-	toAbsolutePath(note: ReviewNote, workspaceFolder: vscode.WorkspaceFolder): string {
-		return path.join(workspaceFolder.uri.fsPath, note.file);
+	toAbsolutePath(thread: ReviewThread, workspaceFolder: vscode.WorkspaceFolder): string {
+		return path.join(workspaceFolder.uri.fsPath, thread.file);
 	}
 }

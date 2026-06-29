@@ -24,8 +24,8 @@
       "properties": {
         "zce.review.storagePath": {
           "type": "string",
-          "default": ".vscode/ai-review.json",
-          "markdownDescription": "Path to the review notes JSON file. Relative paths are resolved from the workspace folder root."
+          "default": ".vscode/zce-review.json",
+          "markdownDescription": "Path to the review comments JSON file. Relative paths are resolved from the workspace folder root."
         }
       }
     },
@@ -57,7 +57,7 @@
       },
       {
         "command": "zce.review.add",
-        "title": "Add Note",
+        "title": "Add Comment",
         "category": "ZCE Review"
       },
       {
@@ -72,23 +72,23 @@
       },
       {
         "command": "zce.review.submit",
-        "title": "Add Note",
+        "title": "Add Comment",
         "category": "ZCE Review"
       },
       {
         "command": "zce.review.editComment",
-        "title": "Edit Note",
+        "title": "Edit",
         "category": "ZCE Review",
         "icon": "$(edit)"
       },
       {
         "command": "zce.review.saveComment",
-        "title": "Save Note",
+        "title": "Save",
         "category": "ZCE Review"
       },
       {
         "command": "zce.review.cancelEdit",
-        "title": "Cancel Edit",
+        "title": "Cancel",
         "category": "ZCE Review"
       },
       {
@@ -116,13 +116,13 @@
         "icon": "$(trash)"
       },
       {
-        "command": "zce.review.resolveFileNotes",
-        "title": "Resolve All Notes in File",
+        "command": "zce.review.resolveFileComments",
+        "title": "Resolve All Comments in File",
         "category": "ZCE Review"
       },
       {
-        "command": "zce.review.deleteFileNotes",
-        "title": "Delete All Notes in File",
+        "command": "zce.review.deleteFileComments",
+        "title": "Delete All Comments in File",
         "category": "ZCE Review"
       }
     ],
@@ -150,12 +150,12 @@
           "group": "9_cutcopypaste@102"
         },
         {
-          "command": "zce.review.resolveFileNotes",
+          "command": "zce.review.resolveFileComments",
           "when": "editorTextFocus",
           "group": "9_cutcopypaste@103"
         },
         {
-          "command": "zce.review.deleteFileNotes",
+          "command": "zce.review.deleteFileComments",
           "when": "editorTextFocus",
           "group": "9_cutcopypaste@104"
         }
@@ -172,12 +172,12 @@
           "group": "9_cutcopypaste@100"
         },
         {
-          "command": "zce.review.resolveFileNotes",
+          "command": "zce.review.resolveFileComments",
           "when": "explorerResourceIsFile",
           "group": "9_cutcopypaste@101"
         },
         {
-          "command": "zce.review.deleteFileNotes",
+          "command": "zce.review.deleteFileComments",
           "when": "explorerResourceIsFile",
           "group": "9_cutcopypaste@102"
         }
@@ -227,23 +227,28 @@
           "command": "zce.review.submit",
           "group": "inline",
           "when": "commentController == zce.review && commentThreadIsEmpty"
+        },
+        {
+          "command": "zce.review.submit",
+          "group": "inline",
+          "when": "commentController == zce.review && !commentThreadIsEmpty && commentThread == open"
         }
       ],
       "comments/comment/title": [
         {
           "command": "zce.review.editComment",
-          "group": "group@1",
-          "when": "commentController == zce.review && commentThread == open"
+          "group": "overflow@1",
+          "when": "commentController == zce.review && (comment == root || comment == userReply) && commentThread == open"
         }
       ],
       "comments/comment/context": [
         {
-          "command": "zce.review.cancelEdit",
+          "command": "zce.review.saveComment",
           "group": "inline@1",
           "when": "commentController == zce.review"
         },
         {
-          "command": "zce.review.saveComment",
+          "command": "zce.review.cancelEdit",
           "group": "inline@2",
           "when": "commentController == zce.review"
         }
@@ -304,7 +309,8 @@
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "deploy": "vsce publish --no-yarn --no-dependencies"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

@@ -4,14 +4,22 @@ import {
 	asCommentThread,
 	commentBody,
 	mapThreadComment,
-	REVIEW_AUTHOR,
+	replyAuthor,
+	replyContextValue,
 	ReviewComment,
+	ROOT_COMMENT_AUTHOR,
+	USER_REPLY_AUTHOR,
 } from './ReviewComment';
-import { formatLocation, formatFileRange, noteRangeToRange, rangeToNoteRange } from './location';
-import { notesToMarkdown } from './markdownExport';
+import {
+	formatFileRange,
+	formatLocation,
+	reviewRangeToRange,
+	rangeToReviewRange,
+} from './location';
+import { commentsToMarkdown } from './markdownExport';
 import { applyContentChangesToRange, rangesEqual } from './rangeTracking';
 import { ReviewStorage } from './storage';
-import { ReviewNote, ReviewNoteRange } from './types';
+import { ReviewRange, ReviewReply, ReviewThread } from './types';
 import { revealCommentsPanel } from './workspaceReady';
 
 const SAVE_DELAY_MS = 400;
@@ -20,16 +28,16 @@ const RANGE_PERSIST_DELAY_MS = 400;
 export class ReviewCommentController implements vscode.Disposable {
 	private controller: vscode.CommentController | undefined;
 	private activated = false;
-	private readonly threads = new Map<string, vscode.CommentThread>();
-	private readonly threadToNoteId = new WeakMap<vscode.CommentThread, string>();
+	private readonly uiThreads = new Map<string, vscode.CommentThread>();
+	private readonly threadToStorageId = new WeakMap<vscode.CommentThread, string>();
 	private readonly draftThreads = new WeakSet<vscode.CommentThread>();
 	private readonly pendingBodies = new Map<string, string>();
 	private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-	private readonly syncedRanges = new Map<string, ReviewNoteRange>();
+	private readonly syncedRanges = new Map<string, ReviewRange>();
 	private readonly rangePersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
-	private readonly noteIdsByFile = new Map<string, Set<string>>();
-	private readonly noteIdsByUri = new Map<string, Set<string>>();
-	private readonly noteFilesById = new Map<string, string>();
+	private readonly threadIdsByFile = new Map<string, Set<string>>();
+	private readonly threadIdsByUri = new Map<string, Set<string>>();
+	private readonly threadFilesById = new Map<string, string>();
 	private mutatingStorage = false;
 
 	constructor(private readonly storage: ReviewStorage) {}
@@ -57,7 +65,7 @@ export class ReviewCommentController implements vscode.Disposable {
 	registerCommands(context: vscode.ExtensionContext): void {
 		context.subscriptions.push(
 			vscode.commands.registerCommand('zce.review.submit', (reply: vscode.CommentReply) =>
-				this.submitDraft(reply),
+				this.submit(reply),
 			),
 			vscode.commands.registerCommand('zce.review.editComment', (comment: ReviewComment) =>
 				this.editComment(comment),
@@ -84,8 +92,8 @@ export class ReviewCommentController implements vscode.Disposable {
 	}
 
 	async bootstrap(options: { revealPanel?: boolean } = {}): Promise<void> {
-		const notes = await this.storage.loadAll();
-		if (notes.length === 0) {
+		const threads = await this.storage.loadAll();
+		if (threads.length === 0) {
 			this.deactivateIfEmpty();
 			return;
 		}
@@ -102,12 +110,12 @@ export class ReviewCommentController implements vscode.Disposable {
 		await this.bootstrap({ revealPanel: true });
 
 		const controller = this.getController();
-		const thread = controller.createCommentThread(uri, range, []);
-		thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-		thread.contextValue = 'draft';
-		thread.canReply = true;
-		thread.label = 'Review';
-		this.draftThreads.add(thread);
+		const uiThread = controller.createCommentThread(uri, range, []);
+		uiThread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+		uiThread.contextValue = 'draft';
+		uiThread.canReply = true;
+		uiThread.label = 'Review';
+		this.draftThreads.add(uiThread);
 	}
 
 	async syncFromStorage(): Promise<void> {
@@ -115,25 +123,25 @@ export class ReviewCommentController implements vscode.Disposable {
 			return;
 		}
 
-		const notes = await this.storage.loadAll();
-		const noteIds = new Set(notes.map((note) => note.id));
+		const threads = await this.storage.loadAll();
+		const storageIds = new Set(threads.map((thread) => thread.id));
 
-		for (const [noteId, thread] of this.threads) {
-			if (!noteIds.has(noteId)) {
-				this.untrackNote(noteId, thread.uri);
-				thread.dispose();
-				this.threads.delete(noteId);
-				this.syncedRanges.delete(noteId);
+		for (const [storageId, uiThread] of this.uiThreads) {
+			if (!storageIds.has(storageId)) {
+				this.untrackThread(storageId, uiThread.uri);
+				uiThread.dispose();
+				this.uiThreads.delete(storageId);
+				this.syncedRanges.delete(storageId);
 			}
 		}
 
-		for (const note of notes) {
-			this.ensureThread(note);
+		for (const thread of threads) {
+			this.applyStorageThread(thread);
 		}
 	}
 
-	hasNotesForUri(uri: vscode.Uri): boolean {
-		return (this.noteIdsByUri.get(uri.toString())?.size ?? 0) > 0;
+	hasCommentsForUri(uri: vscode.Uri): boolean {
+		return (this.threadIdsByUri.get(uri.toString())?.size ?? 0) > 0;
 	}
 
 	handleDocumentChange(event: vscode.TextDocumentChangeEvent): void {
@@ -146,8 +154,8 @@ export class ReviewCommentController implements vscode.Disposable {
 		}
 
 		const uriKey = event.document.uri.toString();
-		const noteIds = this.noteIdsByUri.get(uriKey);
-		if (!noteIds?.size) {
+		const storageIds = this.threadIdsByUri.get(uriKey);
+		if (!storageIds?.size) {
 			return;
 		}
 
@@ -158,10 +166,10 @@ export class ReviewCommentController implements vscode.Disposable {
 		const relativePath = this.storage.toRelativePath(event.document.uri);
 		let changed = false;
 
-		for (const noteId of noteIds) {
-			const thread = this.threads.get(noteId);
-			const current = this.syncedRanges.get(noteId);
-			if (!thread || !current) {
+		for (const storageId of storageIds) {
+			const uiThread = this.uiThreads.get(storageId);
+			const current = this.syncedRanges.get(storageId);
+			if (!uiThread || !current) {
 				continue;
 			}
 
@@ -170,9 +178,9 @@ export class ReviewCommentController implements vscode.Disposable {
 				continue;
 			}
 
-			this.syncedRanges.set(noteId, next);
-			thread.range = noteRangeToRange(next);
-			thread.label = formatFileRange(relativePath, next);
+			this.syncedRanges.set(storageId, next);
+			uiThread.range = reviewRangeToRange(next);
+			uiThread.label = formatFileRange(relativePath, next);
 			changed = true;
 		}
 
@@ -197,16 +205,16 @@ export class ReviewCommentController implements vscode.Disposable {
 	}
 
 	private async persistSyncedRanges(relativePath: string): Promise<void> {
-		const noteIds = this.noteIdsByFile.get(relativePath);
-		if (!noteIds?.size) {
+		const storageIds = this.threadIdsByFile.get(relativePath);
+		if (!storageIds?.size) {
 			return;
 		}
 
-		const rangesById = new Map<string, ReviewNoteRange>();
-		for (const noteId of noteIds) {
-			const range = this.syncedRanges.get(noteId);
+		const rangesById = new Map<string, ReviewRange>();
+		for (const storageId of storageIds) {
+			const range = this.syncedRanges.get(storageId);
 			if (range) {
-				rangesById.set(noteId, range);
+				rangesById.set(storageId, range);
 			}
 		}
 
@@ -215,7 +223,7 @@ export class ReviewCommentController implements vscode.Disposable {
 		}
 
 		await this.withMutatingStorage(() =>
-			this.storage.updateNoteRangesForFile(relativePath, rangesById),
+			this.storage.updateThreadRangesForFile(relativePath, rangesById),
 		);
 	}
 
@@ -237,7 +245,7 @@ export class ReviewCommentController implements vscode.Disposable {
 			},
 		};
 		this.controller.options = {
-			placeHolder: 'Write a review note...',
+			placeHolder: 'Write a review comment...',
 		};
 	}
 
@@ -255,111 +263,219 @@ export class ReviewCommentController implements vscode.Disposable {
 		}
 	}
 
+	private async submit(reply: vscode.CommentReply): Promise<void> {
+		if (this.isDraft(reply.thread)) {
+			await this.submitDraft(reply);
+			return;
+		}
+
+		await this.submitReply(reply);
+	}
+
+	private isDraft(uiThread: vscode.CommentThread): boolean {
+		if (uiThread.contextValue === 'draft' || this.draftThreads.has(uiThread)) {
+			return true;
+		}
+
+		if (this.resolveStorageId(uiThread)) {
+			return false;
+		}
+
+		return uiThread.comments.length === 0;
+	}
+
+	private resolveStorageId(uiThread: vscode.CommentThread): string | undefined {
+		const mapped = this.threadToStorageId.get(uiThread);
+		if (mapped) {
+			return mapped;
+		}
+
+		for (const [storageId, stored] of this.uiThreads) {
+			if (stored === uiThread) {
+				this.threadToStorageId.set(uiThread, storageId);
+				return storageId;
+			}
+		}
+
+		if (uiThread.contextValue === 'draft') {
+			return undefined;
+		}
+
+		const uri = uiThread.uri.toString();
+		const range = uiThread.range;
+		if (!range) {
+			return undefined;
+		}
+
+		for (const [storageId, stored] of this.uiThreads) {
+			if (stored.uri.toString() === uri && stored.range?.isEqual(range)) {
+				this.threadToStorageId.set(uiThread, storageId);
+				return storageId;
+			}
+		}
+
+		return undefined;
+	}
+
 	private async submitDraft(reply: vscode.CommentReply): Promise<void> {
-		const thread = reply.thread;
+		const uiThread = reply.thread;
 		const text = reply.text.trim();
 		if (!text) {
 			return;
 		}
 
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(thread.uri);
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uiThread.uri);
 		if (!workspaceFolder) {
 			void vscode.window.showWarningMessage('Save the file inside a workspace folder first.');
 			return;
 		}
 
-		const range = thread.range;
+		const range = uiThread.range;
 		if (!range) {
 			return;
 		}
 
-		const note: ReviewNote = {
+		const thread: ReviewThread = {
 			id: randomUUID(),
-			file: this.storage.toRelativePath(thread.uri),
-			range: rangeToNoteRange(range),
-			note: text,
+			file: this.storage.toRelativePath(uiThread.uri),
+			range: rangeToReviewRange(range),
+			body: text,
 			createdAt: new Date().toISOString(),
+			replies: [],
 			resolved: false,
 		};
 
-		await this.withMutatingStorage(() => this.storage.addNote(note, thread.uri));
+		await this.withMutatingStorage(() => this.storage.addThread(thread, uiThread.uri));
 
-		this.draftThreads.delete(thread);
-		this.bindThread(note, thread);
-		this.syncedRanges.set(note.id, note.range);
-		this.setThreadComments(thread, note, vscode.CommentMode.Preview);
-		this.applyThreadMetadata(thread, note);
-		thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-		thread.canReply = false;
+		this.draftThreads.delete(uiThread);
+		this.bindStorageThread(thread, uiThread);
+		this.syncedRanges.set(thread.id, thread.range);
+		this.setUiComments(uiThread, thread);
+		this.applyThreadMetadata(uiThread, thread);
+		uiThread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
 	}
 
-	private editComment(comment: ReviewComment): void {
-		const thread = comment.parent;
-		if (thread.contextValue === 'resolved') {
+	private async submitReply(reply: vscode.CommentReply): Promise<void> {
+		const uiThread = reply.thread;
+		const text = reply.text.trim();
+		if (!text) {
 			return;
 		}
 
-		mapThreadComment(thread, comment.noteId, (current) =>
+		const storageId = this.resolveStorageId(uiThread);
+		if (!storageId) {
+			void vscode.window.showWarningMessage('Could not save reply: comment thread is not linked.');
+			return;
+		}
+
+		const thread = await this.storage.ensureThreadLoaded(storageId);
+		if (!thread || thread.resolved) {
+			return;
+		}
+
+		const entry: ReviewReply = {
+			id: randomUUID(),
+			body: text,
+			author: USER_REPLY_AUTHOR,
+			createdAt: new Date().toISOString(),
+		};
+
+		thread.replies = [...(thread.replies ?? []), entry];
+		await this.withMutatingStorage(() => this.storage.updateThread(thread));
+		this.setUiComments(uiThread, thread);
+	}
+
+	private editComment(comment: ReviewComment): void {
+		const uiThread = comment.parent;
+		if (!this.isEditableComment(comment, uiThread)) {
+			return;
+		}
+
+		mapThreadComment(uiThread, comment.commentId, (current) =>
 			new ReviewComment(
-				current.noteId,
+				current.commentId,
+				current.threadId,
+				current.isRoot,
 				commentBody(current.body),
 				vscode.CommentMode.Editing,
 				current.author,
-				thread,
+				uiThread,
+				current.contextValue,
 			),
 		);
 	}
 
 	private saveComment(comment: ReviewComment): void {
-		const thread = comment.parent;
+		const uiThread = comment.parent;
+		if (!this.isEditableComment(comment, uiThread)) {
+			return;
+		}
+
 		const body = commentBody(comment.body);
 
-		mapThreadComment(thread, comment.noteId, (current) =>
+		mapThreadComment(uiThread, comment.commentId, (current) =>
 			new ReviewComment(
-				current.noteId,
+				current.commentId,
+				current.threadId,
+				current.isRoot,
 				body,
 				vscode.CommentMode.Preview,
 				current.author,
-				thread,
+				uiThread,
+				current.contextValue,
 			),
 		);
 
-		this.scheduleSave(comment.noteId, body);
+		this.scheduleSave(comment, body);
 	}
 
 	private cancelEdit(comment: ReviewComment): void {
-		const thread = comment.parent;
+		const uiThread = comment.parent;
 
-		mapThreadComment(thread, comment.noteId, (current) =>
+		mapThreadComment(uiThread, comment.commentId, (current) =>
 			new ReviewComment(
-				current.noteId,
+				current.commentId,
+				current.threadId,
+				current.isRoot,
 				current.savedBody,
 				vscode.CommentMode.Preview,
 				current.author,
-				thread,
+				uiThread,
+				current.contextValue,
 			),
 		);
 	}
 
-	private async deleteThread(thread: vscode.CommentThread | undefined): Promise<void> {
-		if (!thread) {
+	private isEditableComment(
+		comment: ReviewComment,
+		uiThread: vscode.CommentThread,
+	): boolean {
+		if (uiThread.contextValue === 'resolved') {
+			return false;
+		}
+
+		return comment.isRoot || comment.contextValue === 'userReply';
+	}
+
+	private async deleteThread(uiThread: vscode.CommentThread | undefined): Promise<void> {
+		if (!uiThread) {
 			return;
 		}
 
-		if (this.draftThreads.has(thread)) {
-			this.draftThreads.delete(thread);
-			thread.dispose();
+		if (this.isDraft(uiThread)) {
+			this.draftThreads.delete(uiThread);
+			uiThread.dispose();
 			return;
 		}
 
-		const noteId = this.threadToNoteId.get(thread);
-		if (!noteId) {
-			thread.dispose();
+		const storageId = this.resolveStorageId(uiThread);
+		if (!storageId) {
+			uiThread.dispose();
 			return;
 		}
 
 		const confirm = await vscode.window.showWarningMessage(
-			'Delete this note permanently?',
+			'Delete this comment thread permanently?',
 			{ modal: true },
 			'Delete',
 		);
@@ -367,239 +483,333 @@ export class ReviewCommentController implements vscode.Disposable {
 			return;
 		}
 
-		await this.deleteNoteById(noteId);
+		await this.deleteThreadById(storageId);
 	}
 
 	private async setResolved(
-		thread: vscode.CommentThread | undefined,
+		uiThread: vscode.CommentThread | undefined,
 		resolved: boolean,
 	): Promise<void> {
+		if (!uiThread) {
+			return;
+		}
+
+		const storageId = this.resolveStorageId(uiThread);
+		if (!storageId) {
+			return;
+		}
+
+		const thread = await this.storage.ensureThreadLoaded(storageId);
 		if (!thread) {
 			return;
 		}
 
-		const noteId = this.threadToNoteId.get(thread);
-		if (!noteId) {
-			return;
-		}
+		thread.resolved = resolved;
+		thread.resolvedAt = resolved ? new Date().toISOString() : undefined;
 
-		const note = await this.storage.ensureNoteLoaded(noteId);
-		if (!note) {
-			return;
-		}
-
-		note.resolved = resolved;
-		note.resolvedAt = resolved ? new Date().toISOString() : undefined;
-
-		await this.withMutatingStorage(() => this.storage.updateNote(note));
-		this.applyThreadMetadata(thread, note);
+		await this.withMutatingStorage(() => this.storage.updateThread(thread));
+		this.applyThreadMetadata(uiThread, thread);
 	}
 
-	private async copyThreadAsMarkdown(thread: vscode.CommentThread | undefined): Promise<void> {
+	private async copyThreadAsMarkdown(uiThread: vscode.CommentThread | undefined): Promise<void> {
+		if (!uiThread) {
+			return;
+		}
+
+		const storageId = this.resolveStorageId(uiThread);
+		if (!storageId) {
+			return;
+		}
+
+		const thread = await this.storage.ensureThreadLoaded(storageId);
 		if (!thread) {
 			return;
 		}
 
-		const noteId = this.threadToNoteId.get(thread);
-		if (!noteId) {
-			return;
-		}
-
-		const note = await this.storage.ensureNoteLoaded(noteId);
-		if (!note) {
-			return;
-		}
-
-		const markdown = notesToMarkdown([note]);
+		const markdown = commentsToMarkdown([thread]);
 		await vscode.env.clipboard.writeText(markdown);
-		void vscode.window.showInformationMessage('Copied note as Markdown.');
+		void vscode.window.showInformationMessage('Copied comment as Markdown.');
 	}
 
-	private scheduleSave(noteId: string, body: string): void {
-		this.pendingBodies.set(noteId, body);
+	private scheduleSave(comment: ReviewComment, body: string): void {
+		const key = comment.isRoot ? comment.commentId : `${comment.threadId}:${comment.commentId}`;
+		this.pendingBodies.set(key, body);
 
-		const existing = this.saveTimers.get(noteId);
+		const existing = this.saveTimers.get(key);
 		if (existing) {
 			clearTimeout(existing);
 		}
 
 		this.saveTimers.set(
-			noteId,
+			key,
 			setTimeout(() => {
-				void this.flushSave(noteId);
+				void this.flushSave(key);
 			}, SAVE_DELAY_MS),
 		);
 	}
 
-	private async flushSave(noteId: string): Promise<void> {
-		const body = this.pendingBodies.get(noteId);
+	private async flushSave(key: string): Promise<void> {
+		const body = this.pendingBodies.get(key);
 		if (body === undefined) {
 			return;
 		}
 
-		this.pendingBodies.delete(noteId);
-		this.saveTimers.delete(noteId);
+		this.pendingBodies.delete(key);
+		this.saveTimers.delete(key);
 
-		const note = await this.storage.ensureNoteLoaded(noteId);
-		if (!note) {
+		if (key.includes(':')) {
+			const [storageId, replyId] = key.split(':');
+			const thread = await this.storage.ensureThreadLoaded(storageId);
+			if (!thread) {
+				return;
+			}
+
+			const reply = thread.replies?.find((entry) => entry.id === replyId);
+			if (!reply) {
+				return;
+			}
+
+			const trimmed = body.trim();
+			if (!trimmed) {
+				thread.replies = thread.replies?.filter((entry) => entry.id !== replyId);
+			} else {
+				reply.body = trimmed;
+			}
+
+			await this.withMutatingStorage(() => this.storage.updateThread(thread));
+
+			const uiThread = this.uiThreads.get(storageId);
+			if (uiThread) {
+				this.setUiComments(uiThread, thread);
+			}
+
+			return;
+		}
+
+		const thread = await this.storage.ensureThreadLoaded(key);
+		if (!thread) {
 			return;
 		}
 
 		const trimmed = body.trim();
 		if (!trimmed) {
-			await this.deleteNoteById(noteId);
+			await this.deleteThreadById(key);
 			return;
 		}
 
-		note.note = trimmed;
-		await this.withMutatingStorage(() => this.storage.updateNote(note));
+		thread.body = trimmed;
+		await this.withMutatingStorage(() => this.storage.updateThread(thread));
 	}
 
-	private async deleteNoteById(noteId: string): Promise<void> {
-		const note = await this.storage.ensureNoteLoaded(noteId);
-		if (!note) {
+	private async deleteThreadById(storageId: string): Promise<void> {
+		const thread = await this.storage.ensureThreadLoaded(storageId);
+		if (!thread) {
 			return;
 		}
 
-		const thread = this.threads.get(noteId);
-		if (thread) {
-			this.untrackNote(noteId, thread.uri);
-			this.threads.delete(noteId);
-			this.syncedRanges.delete(noteId);
-			thread.dispose();
+		const uiThread = this.uiThreads.get(storageId);
+		if (uiThread) {
+			this.untrackThread(storageId, uiThread.uri);
+			this.uiThreads.delete(storageId);
+			this.syncedRanges.delete(storageId);
+			uiThread.dispose();
 		}
 
-		await this.withMutatingStorage(() => this.storage.removeNote(note));
+		await this.withMutatingStorage(() => this.storage.removeThread(thread));
 	}
 
-	private ensureThread(note: ReviewNote): void {
-		const workspaceFolder = this.storage.resolveWorkspaceFolder(note);
+	private applyStorageThread(thread: ReviewThread): void {
+		const workspaceFolder = this.storage.resolveWorkspaceFolder(thread);
 		if (!workspaceFolder) {
 			return;
 		}
 
 		const controller = this.getController();
-		const uri = vscode.Uri.file(this.storage.toAbsolutePath(note, workspaceFolder));
-		const range = noteRangeToRange(note.range);
+		const uri = vscode.Uri.file(this.storage.toAbsolutePath(thread, workspaceFolder));
+		const range = reviewRangeToRange(thread.range);
 
-		let thread = this.threads.get(note.id);
-		if (thread && thread.uri.toString() !== uri.toString()) {
-			this.untrackNote(note.id, thread.uri);
-			this.threads.delete(note.id);
-			this.syncedRanges.delete(note.id);
-			thread.dispose();
-			thread = undefined;
+		let uiThread = this.uiThreads.get(thread.id);
+		if (uiThread && uiThread.uri.toString() !== uri.toString()) {
+			this.untrackThread(thread.id, uiThread.uri);
+			this.uiThreads.delete(thread.id);
+			this.syncedRanges.delete(thread.id);
+			uiThread.dispose();
+			uiThread = undefined;
 		}
 
-		if (!thread) {
-			thread = controller.createCommentThread(uri, range, []);
-			thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
-			thread.canReply = false;
-			this.bindThread(note, thread);
-			thread.range = range;
-			this.syncedRanges.set(note.id, note.range);
+		if (!uiThread) {
+			uiThread = controller.createCommentThread(uri, range, []);
+			uiThread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
+			this.bindStorageThread(thread, uiThread);
+			uiThread.range = range;
+			this.syncedRanges.set(thread.id, thread.range);
 		} else {
-			const lastSynced = this.syncedRanges.get(note.id);
-			if (lastSynced && !rangesEqual(lastSynced, note.range)) {
-				thread.range = range;
-				this.syncedRanges.set(note.id, note.range);
+			const lastSynced = this.syncedRanges.get(thread.id);
+			if (lastSynced && !rangesEqual(lastSynced, thread.range)) {
+				uiThread.range = range;
+				this.syncedRanges.set(thread.id, thread.range);
 			} else if (!lastSynced) {
-				this.syncedRanges.set(note.id, note.range);
+				this.syncedRanges.set(thread.id, thread.range);
 			}
 		}
 
-		this.applyThreadMetadata(thread, note);
+		this.applyThreadMetadata(uiThread, thread);
 
-		const existing = thread.comments[0] as ReviewComment | undefined;
-		if (!existing || existing.mode === vscode.CommentMode.Editing) {
-			if (!existing) {
-				this.setThreadComments(thread, note, vscode.CommentMode.Preview);
-			}
+		if (this.isUiThreadEditing(uiThread)) {
 			return;
 		}
 
-		if (commentBody(existing.body) !== note.note) {
-			this.setThreadComments(thread, note, vscode.CommentMode.Preview);
+		if (!this.uiMatchesStorage(uiThread, thread)) {
+			this.setUiComments(uiThread, thread);
 		}
 	}
 
-	private applyThreadMetadata(thread: vscode.CommentThread, note: ReviewNote): void {
-		thread.contextValue = note.resolved ? 'resolved' : 'open';
-		thread.state = note.resolved
+	private isUiThreadEditing(uiThread: vscode.CommentThread): boolean {
+		return uiThread.comments.some(
+			(item) => (item as ReviewComment).mode === vscode.CommentMode.Editing,
+		);
+	}
+
+	private uiMatchesStorage(uiThread: vscode.CommentThread, thread: ReviewThread): boolean {
+		const displayed = uiThread.comments as ReviewComment[];
+		const replies = thread.replies ?? [];
+
+		if (displayed.length !== 1 + replies.length) {
+			return false;
+		}
+
+		const root = displayed[0];
+		if (!root?.isRoot || root.commentId !== thread.id || commentBody(root.body) !== thread.body) {
+			return false;
+		}
+
+		for (let index = 0; index < replies.length; index += 1) {
+			const reply = replies[index];
+			const comment = displayed[index + 1];
+			if (
+				!comment ||
+				comment.isRoot ||
+				comment.commentId !== reply.id ||
+				commentBody(comment.body) !== reply.body ||
+				comment.author.name !== replyAuthor(reply.author).name
+			) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private applyThreadMetadata(uiThread: vscode.CommentThread, thread: ReviewThread): void {
+		uiThread.contextValue = thread.resolved ? 'resolved' : 'open';
+		uiThread.state = thread.resolved
 			? vscode.CommentThreadState.Resolved
 			: vscode.CommentThreadState.Unresolved;
-		thread.label = formatLocation(note);
+		uiThread.label = formatLocation(thread);
+		uiThread.canReply = !thread.resolved;
 	}
 
-	private setThreadComments(
-		thread: vscode.CommentThread,
-		note: ReviewNote,
-		mode: vscode.CommentMode,
-	): void {
-		thread.comments = [
-			new ReviewComment(note.id, note.note, mode, REVIEW_AUTHOR, thread),
+	private setUiComments(uiThread: vscode.CommentThread, thread: ReviewThread): void {
+		const existing = new Map(
+			uiThread.comments.map((item) => [(item as ReviewComment).commentId, item as ReviewComment]),
+		);
+
+		const rootExisting = existing.get(thread.id);
+		const rootMode =
+			rootExisting?.mode === vscode.CommentMode.Editing
+				? vscode.CommentMode.Editing
+				: vscode.CommentMode.Preview;
+
+		const comments: ReviewComment[] = [
+			new ReviewComment(
+				thread.id,
+				thread.id,
+				true,
+				thread.body,
+				rootMode,
+				ROOT_COMMENT_AUTHOR,
+				uiThread,
+			),
 		];
+
+		for (const reply of thread.replies ?? []) {
+			comments.push(
+				new ReviewComment(
+					reply.id,
+					thread.id,
+					false,
+					reply.body,
+					vscode.CommentMode.Preview,
+					replyAuthor(reply.author),
+					uiThread,
+					replyContextValue(reply.author),
+				),
+			);
+		}
+
+		uiThread.comments = comments;
+		this.threadToStorageId.set(uiThread, thread.id);
 	}
 
-	private bindThread(note: ReviewNote, thread: vscode.CommentThread): void {
-		this.threads.set(note.id, thread);
-		this.threadToNoteId.set(thread, note.id);
-		this.trackNote(note.id, thread.uri, note.file);
+	private bindStorageThread(thread: ReviewThread, uiThread: vscode.CommentThread): void {
+		this.uiThreads.set(thread.id, uiThread);
+		this.threadToStorageId.set(uiThread, thread.id);
+		this.trackThread(thread.id, uiThread.uri, thread.file);
 	}
 
-	private trackNote(noteId: string, uri: vscode.Uri, relativePath: string): void {
-		this.noteFilesById.set(noteId, relativePath);
+	private trackThread(storageId: string, uri: vscode.Uri, relativePath: string): void {
+		this.threadFilesById.set(storageId, relativePath);
 
 		const uriKey = uri.toString();
-		let byUri = this.noteIdsByUri.get(uriKey);
+		let byUri = this.threadIdsByUri.get(uriKey);
 		if (!byUri) {
 			byUri = new Set();
-			this.noteIdsByUri.set(uriKey, byUri);
+			this.threadIdsByUri.set(uriKey, byUri);
 		}
-		byUri.add(noteId);
+		byUri.add(storageId);
 
-		let byFile = this.noteIdsByFile.get(relativePath);
+		let byFile = this.threadIdsByFile.get(relativePath);
 		if (!byFile) {
 			byFile = new Set();
-			this.noteIdsByFile.set(relativePath, byFile);
+			this.threadIdsByFile.set(relativePath, byFile);
 		}
-		byFile.add(noteId);
+		byFile.add(storageId);
 	}
 
-	private untrackNote(noteId: string, uri: vscode.Uri): void {
-		const relativePath = this.noteFilesById.get(noteId);
-		this.noteFilesById.delete(noteId);
+	private untrackThread(storageId: string, uri: vscode.Uri): void {
+		const relativePath = this.threadFilesById.get(storageId);
+		this.threadFilesById.delete(storageId);
 
 		const uriKey = uri.toString();
-		const byUri = this.noteIdsByUri.get(uriKey);
+		const byUri = this.threadIdsByUri.get(uriKey);
 		if (byUri) {
-			byUri.delete(noteId);
+			byUri.delete(storageId);
 			if (byUri.size === 0) {
-				this.noteIdsByUri.delete(uriKey);
+				this.threadIdsByUri.delete(uriKey);
 			}
 		}
 
 		if (relativePath) {
-			const byFile = this.noteIdsByFile.get(relativePath);
+			const byFile = this.threadIdsByFile.get(relativePath);
 			if (byFile) {
-				byFile.delete(noteId);
+				byFile.delete(storageId);
 				if (byFile.size === 0) {
-					this.noteIdsByFile.delete(relativePath);
+					this.threadIdsByFile.delete(relativePath);
 				}
 			}
 		}
 	}
 
 	private deactivateIfEmpty(): void {
-		for (const thread of this.threads.values()) {
-			thread.dispose();
+		for (const uiThread of this.uiThreads.values()) {
+			uiThread.dispose();
 		}
 
-		this.threads.clear();
+		this.uiThreads.clear();
 		this.syncedRanges.clear();
-		this.noteIdsByFile.clear();
-		this.noteIdsByUri.clear();
-		this.noteFilesById.clear();
+		this.threadIdsByFile.clear();
+		this.threadIdsByUri.clear();
+		this.threadFilesById.clear();
 		this.controller?.dispose();
 		this.controller = undefined;
 		this.activated = false;

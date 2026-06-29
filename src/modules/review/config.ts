@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-export const DEFAULT_STORAGE_PATH = '.vscode/ai-review.json';
+export const DEFAULT_STORAGE_PATH = '.vscode/zce-review.json';
 export const REVIEW_CONFIG_SECTION = 'zce.review';
 
 export function getStoragePathForFolder(workspaceFolder: vscode.WorkspaceFolder): string {

@@ -3,11 +3,11 @@ import { ExtensionModule } from '../../module';
 import { REVIEW_CONFIG_SECTION } from './config';
 import { ReviewCommentController } from './comments';
 import {
-	copyFileNotesForPath,
-	deleteFileNotesForPath,
-	resolveFileNotesForPath,
+	copyFileCommentsForPath,
+	deleteFileCommentsForPath,
+	resolveFileCommentsForPath,
 } from './fileActions';
-import { notesToMarkdown } from './markdownExport';
+import { commentsToMarkdown } from './markdownExport';
 import { ReviewStorage } from './storage';
 import { scheduleStartupRetries, whenWorkspaceReady } from './workspaceReady';
 
@@ -52,25 +52,25 @@ export class ReviewModule implements ExtensionModule {
 					return;
 				}
 
-				if (!this.commentController.hasNotesForUri(event.document.uri)) {
+				if (!this.commentController.hasCommentsForUri(event.document.uri)) {
 					return;
 				}
 
 				this.commentController.handleDocumentChange(event);
 			}),
 			scheduleStartupRetries(() => bootstrapReview(true)),
-			vscode.commands.registerCommand('zce.review.add', () => this.addNote()),
+			vscode.commands.registerCommand('zce.review.add', () => this.addComment()),
 			vscode.commands.registerCommand('zce.review.copyAsMarkdown', () =>
 				this.copyAsMarkdown(),
 			),
 			vscode.commands.registerCommand('zce.review.copyFileAsMarkdown', (resource?: vscode.Uri) =>
-				this.runForFile(resource, (file) => copyFileNotesForPath(this.storage, file)),
+				this.runForFile(resource, (file) => copyFileCommentsForPath(this.storage, file)),
 			),
-			vscode.commands.registerCommand('zce.review.resolveFileNotes', (resource?: vscode.Uri) =>
-				this.runForFile(resource, (file) => resolveFileNotesForPath(this.storage, file)),
+			vscode.commands.registerCommand('zce.review.resolveFileComments', (resource?: vscode.Uri) =>
+				this.runForFile(resource, (file) => resolveFileCommentsForPath(this.storage, file)),
 			),
-			vscode.commands.registerCommand('zce.review.deleteFileNotes', (resource?: vscode.Uri) =>
-				this.runForFile(resource, (file) => deleteFileNotesForPath(this.storage, file)),
+			vscode.commands.registerCommand('zce.review.deleteFileComments', (resource?: vscode.Uri) =>
+				this.runForFile(resource, (file) => deleteFileCommentsForPath(this.storage, file)),
 			),
 		);
 	}
@@ -79,7 +79,7 @@ export class ReviewModule implements ExtensionModule {
 		this.commentController?.dispose();
 	}
 
-	private async addNote(): Promise<void> {
+	private async addComment(): Promise<void> {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			void vscode.window.showWarningMessage('No active editor.');
@@ -126,16 +126,16 @@ export class ReviewModule implements ExtensionModule {
 	}
 
 	private async copyAsMarkdown(): Promise<void> {
-		const notes = await this.storage.loadAll();
-		if (notes.length === 0) {
-			void vscode.window.showWarningMessage('No notes to export.');
+		const threads = await this.storage.loadAll();
+		if (threads.length === 0) {
+			void vscode.window.showWarningMessage('No comments to export.');
 			return;
 		}
 
-		const markdown = notesToMarkdown(notes);
+		const markdown = commentsToMarkdown(threads);
 		await vscode.env.clipboard.writeText(markdown);
 		void vscode.window.showInformationMessage(
-			`Copied ${notes.length} note${notes.length === 1 ? '' : 's'} as Markdown.`,
+			`Copied ${threads.length} comment${threads.length === 1 ? '' : 's'} as Markdown.`,
 		);
 	}
 }

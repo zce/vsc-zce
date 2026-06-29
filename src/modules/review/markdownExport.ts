@@ -1,22 +1,32 @@
+import { storedReplyAuthor } from './ReviewComment';
 import { formatLocation } from './location';
-import { ReviewNote } from './types';
+import { ReviewReply, ReviewThread } from './types';
 
-function sectionHeading(note: ReviewNote): string {
-	return `## ${formatLocation(note)}`;
+function sectionHeading(thread: ReviewThread): string {
+	return `## ${formatLocation(thread)}`;
 }
 
-function formatNoteSection(note: ReviewNote): string {
-	return [sectionHeading(note), '', note.note.trim()].join('\n');
+function formatReply(reply: ReviewReply): string {
+	const author = storedReplyAuthor(reply.author);
+	return [`### ${author}`, '', reply.body.trim()].join('\n');
 }
 
-export function notesToMarkdown(notes: ReviewNote[]): string {
-	if (notes.length === 0) {
+function formatThreadSection(thread: ReviewThread): string {
+	const parts = [sectionHeading(thread), '', thread.body.trim()];
+	for (const reply of thread.replies ?? []) {
+		parts.push('', formatReply(reply));
+	}
+	return parts.join('\n');
+}
+
+export function commentsToMarkdown(threads: ReviewThread[]): string {
+	if (threads.length === 0) {
 		return '';
 	}
 
-	if (notes.length === 1) {
-		return formatNoteSection(notes[0]) + '\n';
+	if (threads.length === 1) {
+		return formatThreadSection(threads[0]) + '\n';
 	}
 
-	return notes.map(formatNoteSection).join('\n\n---\n\n') + '\n';
+	return threads.map(formatThreadSection).join('\n\n---\n\n') + '\n';
 }

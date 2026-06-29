@@ -24,18 +24,22 @@ Adds a **ZCE .NET** submenu in the Explorer context menu for running dotnet comm
 
 Automatically resolves the nearest parent directory containing a `.csproj` file. Falls back to the selected folder if none is found.
 
-### Review Notes
+### Review Comments
 
-Add inline review notes to your code and manage them in the built-in **Comments** panel.
+Add inline review comments to your code and manage them in the built-in **Comments** panel.
 
-- **Add Note**: Right-click in the editor → **Add Note**, then type in the comment thread
+- **Add Comment**: Right-click in the editor → **Add Comment**, then type in the comment thread
+- **Edit**: Update your review comment from the comment **...** menu or thread title bar (open threads only)
+- **Reply**: Add follow-up notes on an open thread (stored as `User` in JSON, shown as **You** in the UI)
 - **Thread actions**: Copy as Markdown, Resolve / Unresolve, Delete
-- **File actions** (editor or Explorer context menu): Copy File as Markdown, Resolve All Notes in File, Delete All Notes in File
-- **Copy All as Markdown**: Export every note in the workspace
+- **File actions** (editor or Explorer context menu): Copy File as Markdown, Resolve All Comments in File, Delete All Comments in File
+- **Copy All as Markdown**: Export every comment in the workspace
 
-Notes are stored in `.vscode/ai-review.json` by default. Change the path with `zce.review.storagePath`.
+Comments are stored in `.vscode/zce-review.json` by default. Change the path with `zce.review.storagePath`.
 
-When you edit a file, note positions are tracked automatically so storage stays aligned with the code.
+Reply authors in JSON: **`User`** for your follow-ups, **`Agent`** (or a custom name) for agent responses. Markdown export uses the stored author names.
+
+When you edit a file, comment positions are tracked automatically so storage stays aligned with the code.
 
 Markdown export format:
 
@@ -44,18 +48,20 @@ Markdown export format:
 
 Review comment here.
 
----
+### User
 
-## src/bar.ts:10-15
+A follow-up note.
 
-Another note.
+### Agent
+
+Agent response here.
 ```
 
 ## Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `zce.review.storagePath` | `.vscode/ai-review.json` | Path to the review notes JSON file. Relative paths are resolved from the workspace folder root. |
+| `zce.review.storagePath` | `.vscode/zce-review.json` | Path to the review comments JSON file. Relative paths are resolved from the workspace folder root. |
 
 ## Requirements
 
