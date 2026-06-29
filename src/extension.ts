@@ -2,10 +2,12 @@ import * as vscode from 'vscode';
 import { ExtensionModule } from './module';
 import { DotnetModule } from './modules/dotnet';
 import { EditorModule } from './modules/editor';
+import { ReviewModule } from './modules/review';
 
 const modules: ExtensionModule[] = [
 	new DotnetModule(),
 	new EditorModule(),
+	new ReviewModule(),
 ];
 
 export function activate(context: vscode.ExtensionContext) {

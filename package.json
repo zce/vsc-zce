@@ -14,9 +14,21 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "ZCE Review",
+      "properties": {
+        "zce.review.storagePath": {
+          "type": "string",
+          "default": ".vscode/ai-review.json",
+          "markdownDescription": "Path to the review notes JSON file. Relative paths are resolved from the workspace folder root."
+        }
+      }
+    },
     "commands": [
       {
         "command": "zce.copyLocation",
@@ -42,6 +54,76 @@
         "command": "zce.dotnet.test",
         "title": "dotnet test",
         "category": "ZCE .NET"
+      },
+      {
+        "command": "zce.review.add",
+        "title": "Add Note",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.copyAsMarkdown",
+        "title": "Copy All as Markdown",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.copyFileAsMarkdown",
+        "title": "Copy File as Markdown",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.submit",
+        "title": "Add Note",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.editComment",
+        "title": "Edit Note",
+        "category": "ZCE Review",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "zce.review.saveComment",
+        "title": "Save Note",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.cancelEdit",
+        "title": "Cancel Edit",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.copyThreadAsMarkdown",
+        "title": "Copy as Markdown",
+        "category": "ZCE Review",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "zce.review.resolveThread",
+        "title": "Resolve",
+        "category": "ZCE Review",
+        "icon": "$(check)"
+      },
+      {
+        "command": "zce.review.unresolveThread",
+        "title": "Unresolve",
+        "category": "ZCE Review",
+        "icon": "$(issues)"
+      },
+      {
+        "command": "zce.review.deleteThread",
+        "title": "Delete",
+        "category": "ZCE Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "zce.review.resolveFileNotes",
+        "title": "Resolve All Notes in File",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.deleteFileNotes",
+        "title": "Delete All Notes in File",
+        "category": "ZCE Review"
       }
     ],
     "submenus": [
@@ -56,6 +138,26 @@
           "command": "zce.copyLocation",
           "when": "editorTextFocus",
           "group": "9_cutcopypaste@100"
+        },
+        {
+          "command": "zce.review.add",
+          "when": "editorTextFocus",
+          "group": "9_cutcopypaste@101"
+        },
+        {
+          "command": "zce.review.copyFileAsMarkdown",
+          "when": "editorTextFocus",
+          "group": "9_cutcopypaste@102"
+        },
+        {
+          "command": "zce.review.resolveFileNotes",
+          "when": "editorTextFocus",
+          "group": "9_cutcopypaste@103"
+        },
+        {
+          "command": "zce.review.deleteFileNotes",
+          "when": "editorTextFocus",
+          "group": "9_cutcopypaste@104"
         }
       ],
       "explorer/context": [
@@ -63,6 +165,21 @@
           "submenu": "zce.submenu.dotnet",
           "when": "explorerResourceIsFolder",
           "group": "navigation@100"
+        },
+        {
+          "command": "zce.review.copyFileAsMarkdown",
+          "when": "explorerResourceIsFile",
+          "group": "9_cutcopypaste@100"
+        },
+        {
+          "command": "zce.review.resolveFileNotes",
+          "when": "explorerResourceIsFile",
+          "group": "9_cutcopypaste@101"
+        },
+        {
+          "command": "zce.review.deleteFileNotes",
+          "when": "explorerResourceIsFile",
+          "group": "9_cutcopypaste@102"
         }
       ],
       "zce.submenu.dotnet": [
@@ -81,6 +198,88 @@
         {
           "command": "zce.dotnet.test",
           "when": "explorerResourceIsFolder"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "zce.review.copyThreadAsMarkdown",
+          "group": "navigation@1",
+          "when": "commentController == zce.review && !commentThreadIsEmpty"
+        },
+        {
+          "command": "zce.review.resolveThread",
+          "group": "navigation@2",
+          "when": "commentController == zce.review && commentThread == open"
+        },
+        {
+          "command": "zce.review.unresolveThread",
+          "group": "navigation@2",
+          "when": "commentController == zce.review && commentThread == resolved"
+        },
+        {
+          "command": "zce.review.deleteThread",
+          "group": "navigation@3",
+          "when": "commentController == zce.review && !commentThreadIsEmpty"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "zce.review.submit",
+          "group": "inline",
+          "when": "commentController == zce.review && commentThreadIsEmpty"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "zce.review.editComment",
+          "group": "group@1",
+          "when": "commentController == zce.review && commentThread == open"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "zce.review.cancelEdit",
+          "group": "inline@1",
+          "when": "commentController == zce.review"
+        },
+        {
+          "command": "zce.review.saveComment",
+          "group": "inline@2",
+          "when": "commentController == zce.review"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "zce.review.submit",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.editComment",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.cancelEdit",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.copyThreadAsMarkdown",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.resolveThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.unresolveThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.deleteThread",
+          "when": "false"
         }
       ]
     },
