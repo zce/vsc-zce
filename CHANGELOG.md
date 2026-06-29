@@ -4,6 +4,15 @@ All notable changes to the "zce" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.5]
+
+- Added **Review Notes** module powered by the VS Code Comment API.
+- Add notes from the editor context menu; manage threads in the Comments panel.
+- Persist notes to `.vscode/ai-review.json` (configurable via `zce.review.storagePath`).
+- Copy notes as Markdown at thread, file, or workspace scope.
+- Resolve and delete notes per thread or per file.
+- Track note ranges on document edits so storage stays aligned with moved code.
+
 ## [0.0.4]
 
 - Added **Copy Location** command (`zce.copyLocation`).
