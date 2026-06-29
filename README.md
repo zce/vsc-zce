@@ -28,16 +28,17 @@ Automatically resolves the nearest parent directory containing a `.csproj` file.
 
 Add inline review comments to your code and manage them in the built-in **Comments** panel.
 
-- **Add Comment**: Right-click in the editor → **Add Comment**, then type in the comment thread
-- **Edit**: Update your review comment from the comment **...** menu or thread title bar (open threads only)
+- **Add Comment** / **Refresh Comments**: Editor → **ZCE Review** submenu
+- **Edit**: Comment **...** menu (open threads)
 - **Reply**: Add follow-up notes on an open thread (stored as `User` in JSON, shown as **You** in the UI)
-- **Thread actions**: Copy as Markdown, Resolve / Unresolve, Delete
-- **File actions** (editor or Explorer context menu): Copy File as Markdown, Resolve All Comments in File, Delete All Comments in File
-- **Copy All as Markdown**: Export every comment in the workspace
+- **Thread actions** (title bar): Copy as Markdown, Resolve / Unresolve, Delete
+- **File actions**: **ZCE Review** submenu → Resolve All / Delete All in File; Copy File / Copy All as Markdown at the bottom
 
 Comments are stored in `.vscode/zce-review.json` by default. Change the path with `zce.review.storagePath`.
 
 Reply authors in JSON: **`User`** for your follow-ups, **`Agent`** (or a custom name) for agent responses. Markdown export uses the stored author names.
+
+Use **Refresh Comments** in the **ZCE Review** submenu to reload after external edits; changes are also picked up automatically via a file watcher.
 
 When you edit a file, comment positions are tracked automatically so storage stays aligned with the code.
 

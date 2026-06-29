@@ -20,17 +20,19 @@ import { commentsToMarkdown } from './markdownExport';
 import { applyContentChangesToRange, rangesEqual } from './rangeTracking';
 import { ReviewStorage } from './storage';
 import { ReviewRange, ReviewReply, ReviewThread } from './types';
+import { isReviewStorageUri } from './config';
 import { revealCommentsPanel } from './workspaceReady';
 
 const SAVE_DELAY_MS = 400;
 const RANGE_PERSIST_DELAY_MS = 400;
+const EXTERNAL_SYNC_IDLE_MS = 1200;
 
 export class ReviewCommentController implements vscode.Disposable {
 	private controller: vscode.CommentController | undefined;
 	private activated = false;
 	private readonly uiThreads = new Map<string, vscode.CommentThread>();
 	private readonly threadToStorageId = new WeakMap<vscode.CommentThread, string>();
-	private readonly draftThreads = new WeakSet<vscode.CommentThread>();
+	private readonly draftThreads = new Set<vscode.CommentThread>();
 	private readonly pendingBodies = new Map<string, string>();
 	private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private readonly syncedRanges = new Map<string, ReviewRange>();
@@ -39,6 +41,8 @@ export class ReviewCommentController implements vscode.Disposable {
 	private readonly threadIdsByUri = new Map<string, Set<string>>();
 	private readonly threadFilesById = new Map<string, string>();
 	private mutatingStorage = false;
+	private externalSyncPending = false;
+	private externalSyncTimer: ReturnType<typeof setTimeout> | undefined;
 
 	constructor(private readonly storage: ReviewStorage) {}
 
@@ -51,6 +55,11 @@ export class ReviewCommentController implements vscode.Disposable {
 	}
 
 	dispose(): void {
+		if (this.externalSyncTimer) {
+			clearTimeout(this.externalSyncTimer);
+			this.externalSyncTimer = undefined;
+		}
+
 		for (const timer of this.saveTimers.values()) {
 			clearTimeout(timer);
 		}
@@ -118,10 +127,18 @@ export class ReviewCommentController implements vscode.Disposable {
 		this.draftThreads.add(uiThread);
 	}
 
-	async syncFromStorage(): Promise<void> {
+	async syncFromStorage(options: { force?: boolean; external?: boolean } = {}): Promise<void> {
 		if (!this.activated) {
 			return;
 		}
+
+		if (options.external && !options.force && this.shouldDeferExternalSync()) {
+			this.externalSyncPending = true;
+			this.scheduleExternalSyncFromStorage();
+			return;
+		}
+
+		this.externalSyncPending = false;
 
 		const threads = await this.storage.loadAll();
 		const storageIds = new Set(threads.map((thread) => thread.id));
@@ -138,6 +155,56 @@ export class ReviewCommentController implements vscode.Disposable {
 		for (const thread of threads) {
 			this.applyStorageThread(thread);
 		}
+	}
+
+	flushDeferredExternalSync(): void {
+		if (!this.externalSyncPending) {
+			return;
+		}
+
+		void this.syncFromStorage({ external: true });
+	}
+
+	private shouldDeferExternalSync(): boolean {
+		if (this.draftThreads.size > 0 || this.pendingBodies.size > 0) {
+			return true;
+		}
+
+		if (this.isAnyThreadEditing()) {
+			return true;
+		}
+
+		const editor = vscode.window.activeTextEditor;
+		if (
+			editor &&
+			editor.document.uri.scheme === 'file' &&
+			!isReviewStorageUri(editor.document.uri)
+		) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private isAnyThreadEditing(): boolean {
+		for (const uiThread of this.uiThreads.values()) {
+			if (this.isUiThreadEditing(uiThread)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private scheduleExternalSyncFromStorage(): void {
+		if (this.externalSyncTimer) {
+			clearTimeout(this.externalSyncTimer);
+		}
+
+		this.externalSyncTimer = setTimeout(() => {
+			this.externalSyncTimer = undefined;
+			void this.syncFromStorage({ external: true });
+		}, EXTERNAL_SYNC_IDLE_MS);
 	}
 
 	hasCommentsForUri(uri: vscode.Uri): boolean {
@@ -653,11 +720,11 @@ export class ReviewCommentController implements vscode.Disposable {
 			}
 		}
 
-		this.applyThreadMetadata(uiThread, thread);
-
 		if (this.isUiThreadEditing(uiThread)) {
 			return;
 		}
+
+		this.applyThreadMetadata(uiThread, thread);
 
 		if (!this.uiMatchesStorage(uiThread, thread)) {
 			this.setUiComments(uiThread, thread);

@@ -56,6 +56,11 @@
         "category": "ZCE .NET"
       },
       {
+        "command": "zce.review.refresh",
+        "title": "Refresh Comments",
+        "category": "ZCE Review"
+      },
+      {
         "command": "zce.review.add",
         "title": "Add Comment",
         "category": "ZCE Review"
@@ -128,6 +133,10 @@
     ],
     "submenus": [
       {
+        "id": "zce.submenu.review",
+        "label": "ZCE Review"
+      },
+      {
         "id": "zce.submenu.dotnet",
         "label": "ZCE .NET"
       }
@@ -140,24 +149,9 @@
           "group": "9_cutcopypaste@100"
         },
         {
-          "command": "zce.review.add",
+          "submenu": "zce.submenu.review",
           "when": "editorTextFocus",
-          "group": "9_cutcopypaste@101"
-        },
-        {
-          "command": "zce.review.copyFileAsMarkdown",
-          "when": "editorTextFocus",
-          "group": "9_cutcopypaste@102"
-        },
-        {
-          "command": "zce.review.resolveFileComments",
-          "when": "editorTextFocus",
-          "group": "9_cutcopypaste@103"
-        },
-        {
-          "command": "zce.review.deleteFileComments",
-          "when": "editorTextFocus",
-          "group": "9_cutcopypaste@104"
+          "group": "zce@1"
         }
       ],
       "explorer/context": [
@@ -167,19 +161,38 @@
           "group": "navigation@100"
         },
         {
-          "command": "zce.review.copyFileAsMarkdown",
+          "submenu": "zce.submenu.review",
           "when": "explorerResourceIsFile",
-          "group": "9_cutcopypaste@100"
+          "group": "zce@1"
+        }
+      ],
+      "zce.submenu.review": [
+        {
+          "command": "zce.review.add",
+          "when": "editorTextFocus",
+          "group": "1_comment@1"
+        },
+        {
+          "command": "zce.review.refresh",
+          "when": "editorTextFocus",
+          "group": "1_comment@2"
         },
         {
           "command": "zce.review.resolveFileComments",
-          "when": "explorerResourceIsFile",
-          "group": "9_cutcopypaste@101"
+          "group": "2_file@1"
         },
         {
           "command": "zce.review.deleteFileComments",
-          "when": "explorerResourceIsFile",
-          "group": "9_cutcopypaste@102"
+          "group": "2_file@2"
+        },
+        {
+          "command": "zce.review.copyFileAsMarkdown",
+          "group": "3_export@1"
+        },
+        {
+          "command": "zce.review.copyAsMarkdown",
+          "when": "editorTextFocus",
+          "group": "3_export@2"
         }
       ],
       "zce.submenu.dotnet": [

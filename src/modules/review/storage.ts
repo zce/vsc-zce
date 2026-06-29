@@ -21,6 +21,34 @@ export class ReviewStorage {
 		this.threadById.clear();
 	}
 
+	invalidateFolder(workspaceFolder: vscode.WorkspaceFolder): void {
+		const key = this.folderKey(workspaceFolder);
+		const cached = this.cacheByFolder.get(key);
+		if (!cached) {
+			return;
+		}
+
+		for (const thread of cached) {
+			this.threadById.delete(thread.id);
+		}
+
+		this.cacheByFolder.delete(key);
+	}
+
+	async refreshFromDisk(notify = true): Promise<void> {
+		this.clearCache();
+		await this.loadAll();
+		if (notify) {
+			this.fireChange();
+		}
+	}
+
+	async refreshFolderFromDisk(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+		this.invalidateFolder(workspaceFolder);
+		await this.loadForFolder(workspaceFolder);
+		this.fireChange();
+	}
+
 	private fireChange(): void {
 		for (const listener of this.listeners) {
 			listener();
