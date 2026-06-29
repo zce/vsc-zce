@@ -70,6 +70,11 @@ Agent response here.
 
 ## Release Notes
 
+### 0.0.6
+
+- **Review Comments**: inline comments with user replies, agent replies via JSON, Edit / Resolve / Markdown export.
+- Default storage: `.vscode/zce-review.json`.
+
 ### 0.0.5
 
 - Added **Review Notes** module with VS Code Comment API integration.

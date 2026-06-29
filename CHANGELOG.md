@@ -4,6 +4,13 @@ All notable changes to the "zce" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.6]
+
+- Renamed **Review Notes** to **Review Comments**; default storage file is `.vscode/zce-review.json`.
+- Thread replies: users can add follow-ups in the editor (`User` in JSON, **You** in UI); agents reply via `replies` in JSON.
+- **Edit** / **Save** / **Cancel** in comment edit mode; **Resolve / Unresolve** unchanged.
+- Automated Marketplace publish on version bump in `package.json` (push to `main`).
+
 ## [0.0.5]
 
 - Added **Review Notes** module powered by the VS Code Comment API.
