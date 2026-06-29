@@ -1,15 +1,19 @@
 import * as fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getStoragePathForFolder } from './config';
 import { rangesEqual } from './rangeTracking';
 import { ReviewDocument, ReviewRange, ReviewThread } from './types';
 
+/** Ignore file-watcher reload briefly after our own writes (debounce is 300ms). */
+const EXTERNAL_RELOAD_SUPPRESS_MS = 600;
+
 export class ReviewStorage {
 	private readonly listeners = new Set<() => void>();
 	private readonly cacheByFolder = new Map<string, ReviewThread[]>();
 	private readonly threadById = new Map<string, ReviewThread>();
+	private readonly threadFolderById = new Map<string, vscode.WorkspaceFolder>();
+	private readonly externalReloadSuppressedUntil = new Map<string, number>();
 
 	onDidChange(listener: () => void): vscode.Disposable {
 		this.listeners.add(listener);
@@ -19,6 +23,8 @@ export class ReviewStorage {
 	clearCache(): void {
 		this.cacheByFolder.clear();
 		this.threadById.clear();
+		this.threadFolderById.clear();
+		this.externalReloadSuppressedUntil.clear();
 	}
 
 	invalidateFolder(workspaceFolder: vscode.WorkspaceFolder): void {
@@ -30,9 +36,15 @@ export class ReviewStorage {
 
 		for (const thread of cached) {
 			this.threadById.delete(thread.id);
+			this.threadFolderById.delete(thread.id);
 		}
 
 		this.cacheByFolder.delete(key);
+	}
+
+	shouldSuppressExternalReload(workspaceFolder: vscode.WorkspaceFolder): boolean {
+		const until = this.externalReloadSuppressedUntil.get(this.folderKey(workspaceFolder));
+		return until !== undefined && Date.now() < until;
 	}
 
 	async refreshFromDisk(notify = true): Promise<void> {
@@ -53,9 +65,13 @@ export class ReviewStorage {
 		return workspaceFolder.uri.toString();
 	}
 
-	private indexFolderThreads(threads: readonly ReviewThread[]): void {
+	private indexFolderThreads(
+		threads: readonly ReviewThread[],
+		workspaceFolder: vscode.WorkspaceFolder,
+	): void {
 		for (const thread of threads) {
 			this.threadById.set(thread.id, thread);
+			this.threadFolderById.set(thread.id, workspaceFolder);
 		}
 	}
 
@@ -75,13 +91,9 @@ export class ReviewStorage {
 		relativePath: string,
 	): vscode.WorkspaceFolder | undefined {
 		for (const folder of vscode.workspace.workspaceFolders ?? []) {
-			const absolutePath = path.join(folder.uri.fsPath, relativePath);
-			try {
-				if (existsSync(absolutePath)) {
-					return folder;
-				}
-			} catch {
-				// ignore
+			const uri = vscode.Uri.file(path.join(folder.uri.fsPath, relativePath));
+			if (vscode.workspace.getWorkspaceFolder(uri)?.uri.toString() === folder.uri.toString()) {
+				return folder;
 			}
 		}
 
@@ -89,7 +101,10 @@ export class ReviewStorage {
 	}
 
 	resolveWorkspaceFolder(thread: ReviewThread): vscode.WorkspaceFolder | undefined {
-		return this.findWorkspaceFolderForRelativePath(thread.file);
+		return (
+			this.threadFolderById.get(thread.id) ??
+			this.findWorkspaceFolderForRelativePath(thread.file)
+		);
 	}
 
 	async loadAll(): Promise<ReviewThread[]> {
@@ -122,7 +137,7 @@ export class ReviewStorage {
 			const parsed = JSON.parse(raw) as unknown;
 			const comments = this.parseStoredComments(parsed);
 			this.cacheByFolder.set(key, comments);
-			this.indexFolderThreads(comments);
+			this.indexFolderThreads(comments, workspaceFolder);
 			return comments;
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -143,17 +158,19 @@ export class ReviewStorage {
 		if (previous) {
 			for (const thread of previous) {
 				this.threadById.delete(thread.id);
+				this.threadFolderById.delete(thread.id);
 			}
 		}
 
 		this.cacheByFolder.set(key, threads);
-		this.indexFolderThreads(threads);
+		this.indexFolderThreads(threads, workspaceFolder);
 
 		const storagePath = getStoragePathForFolder(workspaceFolder);
 		await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
 		const payload: ReviewDocument = { comments: threads };
 		await fs.writeFile(storagePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+		this.externalReloadSuppressedUntil.set(key, Date.now() + EXTERNAL_RELOAD_SUPPRESS_MS);
 		this.fireChange();
 	}
 

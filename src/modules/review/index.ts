@@ -40,6 +40,10 @@ export class ReviewModule implements ExtensionModule {
 				return;
 			}
 
+			if (this.storage.shouldSuppressExternalReload(workspaceFolder)) {
+				return;
+			}
+
 			this.storage.invalidateFolder(workspaceFolder);
 			syncComments({ external: true });
 		};
