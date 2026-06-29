@@ -2,48 +2,14 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - v*
 
 permissions:
   contents: read
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      publish: ${{ steps.version.outputs.publish }}
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect version bump
-        id: version
-        run: |
-          CURRENT=$(node -p "require('./package.json').version")
-          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
-
-          if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "No previous commit; skip publish."
-            exit 0
-          fi
-
-          PREVIOUS=$(git show HEAD~1:package.json | node -p "JSON.parse(require('fs').readFileSync(0)).version")
-          if [ "$CURRENT" = "$PREVIOUS" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version unchanged ($CURRENT); skip publish."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version bumped: $PREVIOUS -> $CURRENT"
-          fi
-
   publish:
-    needs: changes
-    if: needs.changes.outputs.publish == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -63,6 +29,16 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$PKG" ]; then
+            echo "Tag version ($VERSION) does not match package.json ($PKG)"
+            exit 1
+          fi
 
       - name: Compile
         run: pnpm run compile
