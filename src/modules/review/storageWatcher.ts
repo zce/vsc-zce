@@ -1,15 +1,25 @@
 import * as vscode from 'vscode';
 import { getStorageWatcherPattern } from './config';
-import { ReviewStorage } from './storage';
 
 const RELOAD_DELAY_MS = 300;
 
 export function registerStorageWatchers(
-	context: vscode.ExtensionContext,
 	onExternalChange: (workspaceFolder: vscode.WorkspaceFolder) => void,
-): { reattach: () => void } {
+): { reattach: () => void; dispose: () => void } {
 	const timers = new Map<string, ReturnType<typeof setTimeout>>();
 	const watchers: vscode.FileSystemWatcher[] = [];
+
+	const dispose = (): void => {
+		for (const timer of timers.values()) {
+			clearTimeout(timer);
+		}
+		timers.clear();
+
+		for (const watcher of watchers) {
+			watcher.dispose();
+		}
+		watchers.length = 0;
+	};
 
 	const scheduleReload = (folder: vscode.WorkspaceFolder): void => {
 		const key = folder.uri.toString();
@@ -47,18 +57,6 @@ export function registerStorageWatchers(
 	};
 
 	attachWatchers();
-	context.subscriptions.push(
-		vscode.workspace.onDidChangeWorkspaceFolders(() => attachWatchers()),
-		new vscode.Disposable(() => {
-			for (const timer of timers.values()) {
-				clearTimeout(timer);
-			}
 
-			for (const watcher of watchers) {
-				watcher.dispose();
-			}
-		}),
-	);
-
-	return { reattach: attachWatchers };
+	return { reattach: attachWatchers, dispose };
 }

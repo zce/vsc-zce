@@ -43,12 +43,6 @@ export class ReviewStorage {
 		}
 	}
 
-	async refreshFolderFromDisk(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
-		this.invalidateFolder(workspaceFolder);
-		await this.loadForFolder(workspaceFolder);
-		this.fireChange();
-	}
-
 	private fireChange(): void {
 		for (const listener of this.listeners) {
 			listener();
@@ -57,10 +51,6 @@ export class ReviewStorage {
 
 	private folderKey(workspaceFolder: vscode.WorkspaceFolder): string {
 		return workspaceFolder.uri.toString();
-	}
-
-	private getStoragePath(workspaceFolder: vscode.WorkspaceFolder): string {
-		return getStoragePathForFolder(workspaceFolder);
 	}
 
 	private indexFolderThreads(threads: readonly ReviewThread[]): void {
@@ -125,7 +115,7 @@ export class ReviewStorage {
 			return cached;
 		}
 
-		const storagePath = this.getStoragePath(workspaceFolder);
+		const storagePath = getStoragePathForFolder(workspaceFolder);
 
 		try {
 			const raw = await fs.readFile(storagePath, 'utf8');
@@ -159,7 +149,7 @@ export class ReviewStorage {
 		this.cacheByFolder.set(key, threads);
 		this.indexFolderThreads(threads);
 
-		const storagePath = this.getStoragePath(workspaceFolder);
+		const storagePath = getStoragePathForFolder(workspaceFolder);
 		await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
 		const payload: ReviewDocument = { comments: threads };
@@ -205,18 +195,14 @@ export class ReviewStorage {
 		await this.saveForFolder(workspaceFolder, threads);
 	}
 
-	findById(id: string): ReviewThread | undefined {
-		return this.threadById.get(id);
-	}
-
 	async ensureThreadLoaded(id: string): Promise<ReviewThread | undefined> {
-		const cached = this.findById(id);
+		const cached = this.threadById.get(id);
 		if (cached) {
 			return cached;
 		}
 
 		await this.loadAll();
-		return this.findById(id);
+		return this.threadById.get(id);
 	}
 
 	async loadForFile(relativePath: string): Promise<ReviewThread[]> {

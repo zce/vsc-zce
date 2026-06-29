@@ -51,14 +51,12 @@ export class ReviewModule implements ExtensionModule {
 			})();
 		};
 
+		const storageWatchers = registerStorageWatchers(reloadFromExternalStorage);
+
 		context.subscriptions.push(
 			this.commentController,
 			this.storage.onDidChange(syncComments),
-		);
-
-		const storageWatchers = registerStorageWatchers(context, reloadFromExternalStorage);
-
-		context.subscriptions.push(
+			new vscode.Disposable(() => storageWatchers.dispose()),
 			vscode.workspace.onDidChangeWorkspaceFolders(() => {
 				this.storage.clearCache();
 				storageWatchers.reattach();

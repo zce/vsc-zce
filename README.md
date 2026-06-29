@@ -71,6 +71,11 @@ Agent response here.
 
 ## Release Notes
 
+### 0.0.7
+
+- External `zce-review.json` edits sync automatically; use **Refresh Comments** to reload manually.
+- **ZCE Review** submenu; deferred sync while editing to keep editor focus.
+
 ### 0.0.6
 
 - **Review Comments**: inline comments with user replies, agent replies via JSON, Edit / Resolve / Markdown export.

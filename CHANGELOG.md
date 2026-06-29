@@ -4,6 +4,12 @@ All notable changes to the "zce" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.7]
+
+- Auto-reload comments when `zce-review.json` is updated externally (file watcher with debounce).
+- **Refresh Comments** command and **ZCE Review** submenu; Markdown export actions moved to the bottom.
+- Defer external sync while editing code or comments to avoid focus interruption.
+
 ## [0.0.6]
 
 - Renamed **Review Notes** to **Review Comments**; default storage file is `.vscode/zce-review.json`.
