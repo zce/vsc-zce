@@ -4,6 +4,13 @@ All notable changes to the "zce" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.9]
+
+- JSON `startLine` / `endLine` are 1-based (same as Copy Location and editor line numbers).
+- Defer background comment sync while editing; avoid stealing editor focus when scrolling.
+- Keep thread labels aligned with tracked ranges; debounce inline range UI updates.
+- Move **ZCE Review** submenu earlier in the editor context menu.
+
 ## [0.0.8]
 
 - Comments panel: thread actions in context menu and inline (Copy, Resolve, Delete).

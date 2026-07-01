@@ -11,7 +11,7 @@ import {
 	USER_REPLY_AUTHOR,
 } from './ReviewComment';
 import {
-	formatLocation,
+	formatFileRange,
 	reviewRangeToRange,
 	rangeToReviewRange,
 } from './location';
@@ -276,6 +276,7 @@ export class ReviewCommentController implements vscode.Disposable {
 			}
 
 			uiThread.range = next;
+			this.syncThreadLabel(uiThread, storageId);
 			changed = true;
 		}
 
@@ -748,6 +749,8 @@ export class ReviewCommentController implements vscode.Disposable {
 			}
 		}
 
+		this.syncThreadLabel(uiThread, thread.id);
+
 		if (this.isUiThreadEditing(uiThread)) {
 			return;
 		}
@@ -799,6 +802,24 @@ export class ReviewCommentController implements vscode.Disposable {
 		return true;
 	}
 
+	private threadLabel(thread: ReviewThread): string {
+		const range = this.syncedRanges.get(thread.id) ?? thread.range;
+		return formatFileRange(thread.file, range);
+	}
+
+	private syncThreadLabel(uiThread: vscode.CommentThread, storageId: string): void {
+		const relativePath = this.threadFilesById.get(storageId);
+		const range = this.syncedRanges.get(storageId);
+		if (!relativePath || !range) {
+			return;
+		}
+
+		const label = formatFileRange(relativePath, range);
+		if (uiThread.label !== label) {
+			uiThread.label = label;
+		}
+	}
+
 	private threadFullyMatchesStorage(
 		uiThread: vscode.CommentThread,
 		thread: ReviewThread,
@@ -816,7 +837,7 @@ export class ReviewCommentController implements vscode.Disposable {
 		const state = thread.resolved
 			? vscode.CommentThreadState.Resolved
 			: vscode.CommentThreadState.Unresolved;
-		const label = formatLocation(thread);
+		const label = this.threadLabel(thread);
 
 		return (
 			uiThread.contextValue === contextValue &&
@@ -831,7 +852,7 @@ export class ReviewCommentController implements vscode.Disposable {
 		const state = thread.resolved
 			? vscode.CommentThreadState.Resolved
 			: vscode.CommentThreadState.Unresolved;
-		const label = formatLocation(thread);
+		const label = this.threadLabel(thread);
 		const canReply = !thread.resolved;
 
 		if (

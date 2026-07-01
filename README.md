@@ -71,6 +71,11 @@ Agent response here.
 
 ## Release Notes
 
+### 0.0.9
+
+- Review JSON line numbers are 1-based; less focus interruption while editing.
+- **ZCE Review** submenu appears earlier in the editor context menu.
+
 ### 0.0.8
 
 - Comments panel thread context menu: Copy, Resolve/Unresolve, Delete.

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { formatLocation } from '../modules/review/location';
+import { formatLocation, reviewRangeFromStorage, reviewRangeToStorage } from '../modules/review/location';
 import { commentsToMarkdown } from '../modules/review/markdownExport';
 import { applyContentChangesToRange } from '../modules/review/rangeTracking';
 import { ReviewThread } from '../modules/review/types';
@@ -43,6 +43,28 @@ suite('Review location', () => {
 		};
 
 		assert.strictEqual(formatLocation(thread), 'src/foo.ts:42-44');
+	});
+});
+
+suite('Review storage line numbers', () => {
+	test('stores 1-based line numbers in JSON', () => {
+		const internal = { startLine: 41, startChar: 0, endLine: 43, endChar: 0 };
+		assert.deepStrictEqual(reviewRangeToStorage(internal), {
+			startLine: 42,
+			startChar: 0,
+			endLine: 44,
+			endChar: 0,
+		});
+	});
+
+	test('loads 1-based line numbers from JSON', () => {
+		const stored = { startLine: 42, startChar: 0, endLine: 44, endChar: 0 };
+		assert.deepStrictEqual(reviewRangeFromStorage(stored), {
+			startLine: 41,
+			startChar: 0,
+			endLine: 43,
+			endChar: 0,
+		});
 	});
 });
 

@@ -39,3 +39,37 @@ export function reviewRangeToRange(range: ReviewRange): vscode.Range {
 		range.endChar,
 	);
 }
+
+/** Convert in-memory (0-based) range to JSON (1-based lines). */
+export function reviewRangeToStorage(range: ReviewRange): ReviewRange {
+	return {
+		startLine: range.startLine + 1,
+		startChar: range.startChar,
+		endLine: range.endLine + 1,
+		endChar: range.endChar,
+	};
+}
+
+/** Convert JSON (1-based lines) to in-memory (0-based). */
+export function reviewRangeFromStorage(range: ReviewRange): ReviewRange {
+	return {
+		startLine: range.startLine - 1,
+		startChar: range.startChar,
+		endLine: range.endLine - 1,
+		endChar: range.endChar,
+	};
+}
+
+export function threadToStorage(thread: ReviewThread): ReviewThread {
+	return {
+		...thread,
+		range: reviewRangeToStorage(thread.range),
+	};
+}
+
+export function threadFromStorage(thread: ReviewThread): ReviewThread {
+	return {
+		...thread,
+		range: reviewRangeFromStorage(thread.range),
+	};
+}

@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getStoragePathForFolder } from './config';
+import { threadFromStorage, threadToStorage } from './location';
 import { rangesEqual } from './rangeTracking';
 import { ReviewDocument, ReviewRange, ReviewThread } from './types';
 
@@ -77,11 +78,11 @@ export class ReviewStorage {
 
 	private parseStoredComments(raw: unknown): ReviewThread[] {
 		if (Array.isArray(raw)) {
-			return raw as ReviewThread[];
+			return raw.map((thread) => threadFromStorage(thread as ReviewThread));
 		}
 
 		if (raw && typeof raw === 'object' && 'comments' in raw) {
-			return (raw as ReviewDocument).comments ?? [];
+			return ((raw as ReviewDocument).comments ?? []).map(threadFromStorage);
 		}
 
 		return [];
@@ -168,7 +169,9 @@ export class ReviewStorage {
 		const storagePath = getStoragePathForFolder(workspaceFolder);
 		await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
-		const payload: ReviewDocument = { comments: threads };
+		const payload: ReviewDocument = {
+			comments: threads.map(threadToStorage),
+		};
 		await fs.writeFile(storagePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
 		this.externalReloadSuppressedUntil.set(key, Date.now() + EXTERNAL_RELOAD_SUPPRESS_MS);
 		this.fireChange();
