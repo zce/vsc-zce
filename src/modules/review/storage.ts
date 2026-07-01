@@ -311,6 +311,47 @@ export class ReviewStorage {
 		return removed;
 	}
 
+	async deleteResolvedInFile(relativePath: string): Promise<number> {
+		const workspaceFolder = this.findWorkspaceFolderForRelativePath(relativePath);
+		if (!workspaceFolder) {
+			return 0;
+		}
+
+		const threads = await this.loadForFolder(workspaceFolder);
+		const remaining = threads.filter(
+			(thread) => thread.file !== relativePath || !thread.resolved,
+		);
+		const removed = threads.length - remaining.length;
+		if (removed === 0) {
+			return 0;
+		}
+
+		await this.saveForFolder(workspaceFolder, remaining);
+		return removed;
+	}
+
+	async deleteAllResolved(): Promise<number> {
+		const folders = vscode.workspace.workspaceFolders;
+		if (!folders?.length) {
+			return 0;
+		}
+
+		let removed = 0;
+		for (const folder of folders) {
+			const threads = await this.loadForFolder(folder);
+			const remaining = threads.filter((thread) => !thread.resolved);
+			const count = threads.length - remaining.length;
+			if (count === 0) {
+				continue;
+			}
+
+			await this.saveForFolder(folder, remaining);
+			removed += count;
+		}
+
+		return removed;
+	}
+
 	toRelativePath(documentUri: vscode.Uri): string {
 		const workspaceFolder = vscode.workspace.getWorkspaceFolder(documentUri);
 		if (workspaceFolder) {

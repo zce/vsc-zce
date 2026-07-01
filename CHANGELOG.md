@@ -4,6 +4,12 @@ All notable changes to the "zce" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.8]
+
+- Comments panel: thread actions in context menu and inline (Copy, Resolve, Delete).
+- **ZCE Review** submenu: copy/delete by resolved state; simplified labels; **Refresh** last.
+- Suppress redundant external reload after local JSON writes.
+
 ## [0.0.7]
 
 - Auto-reload comments when `zce-review.json` is updated externally (file watcher with debounce).

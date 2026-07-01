@@ -4,7 +4,7 @@
   "displayName": "zce",
   "publisher": "zce",
   "description": "zce's personal commands",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "repository": "zce/vsc-zce",
   "license": "MIT",
   "author": "zce <w@zce.me> (https://zce.me)",
@@ -59,23 +59,53 @@
         "category": "ZCE .NET"
       },
       {
-        "command": "zce.review.refresh",
-        "title": "Refresh Comments",
-        "category": "ZCE Review"
-      },
-      {
         "command": "zce.review.add",
         "title": "Add Comment",
         "category": "ZCE Review"
       },
       {
         "command": "zce.review.copyAsMarkdown",
-        "title": "Copy All as Markdown",
+        "title": "Copy All",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.copyUnresolvedAsMarkdown",
+        "title": "Copy Unresolved",
         "category": "ZCE Review"
       },
       {
         "command": "zce.review.copyFileAsMarkdown",
-        "title": "Copy File as Markdown",
+        "title": "Copy File",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.copyFileUnresolvedAsMarkdown",
+        "title": "Copy Unresolved in File",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.deleteFileComments",
+        "title": "Delete All in File",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.deleteResolvedFileComments",
+        "title": "Delete Resolved in File",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.deleteAllResolvedComments",
+        "title": "Delete Resolved",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.resolveFileComments",
+        "title": "Resolve All in File",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.refresh",
+        "title": "Refresh",
         "category": "ZCE Review"
       },
       {
@@ -101,7 +131,7 @@
       },
       {
         "command": "zce.review.copyThreadAsMarkdown",
-        "title": "Copy as Markdown",
+        "title": "Copy",
         "category": "ZCE Review",
         "icon": "$(copy)"
       },
@@ -122,16 +152,6 @@
         "title": "Delete",
         "category": "ZCE Review",
         "icon": "$(trash)"
-      },
-      {
-        "command": "zce.review.resolveFileComments",
-        "title": "Resolve All Comments in File",
-        "category": "ZCE Review"
-      },
-      {
-        "command": "zce.review.deleteFileComments",
-        "title": "Delete All Comments in File",
-        "category": "ZCE Review"
       }
     ],
     "submenus": [
@@ -176,26 +196,43 @@
           "group": "1_comment@1"
         },
         {
-          "command": "zce.review.refresh",
+          "command": "zce.review.copyAsMarkdown",
           "when": "editorTextFocus",
-          "group": "1_comment@2"
+          "group": "3_copy@1"
         },
         {
-          "command": "zce.review.resolveFileComments",
-          "group": "2_file@1"
-        },
-        {
-          "command": "zce.review.deleteFileComments",
-          "group": "2_file@2"
+          "command": "zce.review.copyUnresolvedAsMarkdown",
+          "when": "editorTextFocus",
+          "group": "3_copy@2"
         },
         {
           "command": "zce.review.copyFileAsMarkdown",
-          "group": "3_export@1"
+          "group": "3_copy@3"
         },
         {
-          "command": "zce.review.copyAsMarkdown",
+          "command": "zce.review.copyFileUnresolvedAsMarkdown",
+          "group": "3_copy@4"
+        },
+        {
+          "command": "zce.review.deleteFileComments",
+          "group": "4_delete@1"
+        },
+        {
+          "command": "zce.review.deleteResolvedFileComments",
+          "group": "4_delete@2"
+        },
+        {
+          "command": "zce.review.deleteAllResolvedComments",
+          "group": "4_delete@3"
+        },
+        {
+          "command": "zce.review.resolveFileComments",
+          "group": "8_resolve@1"
+        },
+        {
+          "command": "zce.review.refresh",
           "when": "editorTextFocus",
-          "group": "3_export@2"
+          "group": "9_refresh@1"
         }
       ],
       "zce.submenu.dotnet": [

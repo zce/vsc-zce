@@ -71,6 +71,11 @@ Agent response here.
 
 ## Release Notes
 
+### 0.0.8
+
+- Comments panel thread context menu: Copy, Resolve/Unresolve, Delete.
+- **ZCE Review** submenu: Copy/Delete unresolved or resolved; **Resolve All in File** before **Refresh**.
+
 ### 0.0.7
 
 - External `zce-review.json` edits sync automatically; use **Refresh Comments** to reload manually.
