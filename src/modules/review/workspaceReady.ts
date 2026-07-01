@@ -14,22 +14,3 @@ export async function whenWorkspaceReady(): Promise<void> {
 		});
 	});
 }
-
-export async function revealCommentsPanel(): Promise<void> {
-	await vscode.commands.executeCommand('workbench.action.focusCommentsPanel');
-}
-
-export function scheduleStartupRetries(task: () => void | Promise<void>): vscode.Disposable {
-	const delays = [0, 250, 1000];
-	const timers = delays.map((delay) =>
-		setTimeout(() => {
-			void task();
-		}, delay),
-	);
-
-	return new vscode.Disposable(() => {
-		for (const timer of timers) {
-			clearTimeout(timer);
-		}
-	});
-}

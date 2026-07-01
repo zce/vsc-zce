@@ -174,7 +174,7 @@
         {
           "submenu": "zce.submenu.review",
           "when": "editorTextFocus",
-          "group": "zce@1"
+          "group": "2_zce@1"
         }
       ],
       "explorer/context": [

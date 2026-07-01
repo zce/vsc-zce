@@ -11,7 +11,6 @@ import {
 	USER_REPLY_AUTHOR,
 } from './ReviewComment';
 import {
-	formatFileRange,
 	formatLocation,
 	reviewRangeToRange,
 	rangeToReviewRange,
@@ -21,11 +20,10 @@ import { applyContentChangesToRange, rangesEqual } from './rangeTracking';
 import { ReviewStorage } from './storage';
 import { ReviewRange, ReviewReply, ReviewThread } from './types';
 import { isReviewStorageUri } from './config';
-import { revealCommentsPanel } from './workspaceReady';
 
 const SAVE_DELAY_MS = 400;
 const RANGE_PERSIST_DELAY_MS = 400;
-const EXTERNAL_SYNC_IDLE_MS = 1200;
+const UI_RANGE_REFRESH_DELAY_MS = 400;
 
 export class ReviewCommentController implements vscode.Disposable {
 	private controller: vscode.CommentController | undefined;
@@ -37,12 +35,12 @@ export class ReviewCommentController implements vscode.Disposable {
 	private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private readonly syncedRanges = new Map<string, ReviewRange>();
 	private readonly rangePersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private readonly uiRangeRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private readonly threadIdsByFile = new Map<string, Set<string>>();
 	private readonly threadIdsByUri = new Map<string, Set<string>>();
 	private readonly threadFilesById = new Map<string, string>();
 	private mutatingStorage = false;
-	private externalSyncPending = false;
-	private externalSyncTimer: ReturnType<typeof setTimeout> | undefined;
+	private backgroundSyncPending = false;
 
 	constructor(private readonly storage: ReviewStorage) {}
 
@@ -54,17 +52,20 @@ export class ReviewCommentController implements vscode.Disposable {
 		return this.mutatingStorage;
 	}
 
-	dispose(): void {
-		if (this.externalSyncTimer) {
-			clearTimeout(this.externalSyncTimer);
-			this.externalSyncTimer = undefined;
-		}
+	hasPendingBackgroundSync(): boolean {
+		return this.backgroundSyncPending;
+	}
 
+	dispose(): void {
 		for (const timer of this.saveTimers.values()) {
 			clearTimeout(timer);
 		}
 
 		for (const timer of this.rangePersistTimers.values()) {
+			clearTimeout(timer);
+		}
+
+		for (const timer of this.uiRangeRefreshTimers.values()) {
 			clearTimeout(timer);
 		}
 
@@ -100,7 +101,7 @@ export class ReviewCommentController implements vscode.Disposable {
 		);
 	}
 
-	async bootstrap(options: { revealPanel?: boolean } = {}): Promise<void> {
+	async bootstrap(options: { force?: boolean } = {}): Promise<void> {
 		const threads = await this.storage.loadAll();
 		if (threads.length === 0) {
 			this.deactivateIfEmpty();
@@ -108,15 +109,13 @@ export class ReviewCommentController implements vscode.Disposable {
 		}
 
 		this.ensureActivated();
-		await this.syncFromStorage();
-
-		if (options.revealPanel) {
-			await revealCommentsPanel();
-		}
+		await this.syncFromStorage(options);
 	}
 
 	async openDraft(uri: vscode.Uri, range: vscode.Range): Promise<void> {
-		await this.bootstrap({ revealPanel: true });
+		if (!this.activated) {
+			await this.bootstrap({ force: true });
+		}
 
 		const controller = this.getController();
 		const uiThread = controller.createCommentThread(uri, range, []);
@@ -127,18 +126,17 @@ export class ReviewCommentController implements vscode.Disposable {
 		this.draftThreads.add(uiThread);
 	}
 
-	async syncFromStorage(options: { force?: boolean; external?: boolean } = {}): Promise<void> {
+	async syncFromStorage(options: { force?: boolean } = {}): Promise<void> {
 		if (!this.activated) {
 			return;
 		}
 
-		if (options.external && !options.force && this.shouldDeferExternalSync()) {
-			this.externalSyncPending = true;
-			this.scheduleExternalSyncFromStorage();
+		if (!options.force && this.shouldDeferBackgroundSync()) {
+			this.backgroundSyncPending = true;
 			return;
 		}
 
-		this.externalSyncPending = false;
+		this.backgroundSyncPending = false;
 
 		const threads = await this.storage.loadAll();
 		const storageIds = new Set(threads.map((thread) => thread.id));
@@ -157,15 +155,15 @@ export class ReviewCommentController implements vscode.Disposable {
 		}
 	}
 
-	flushDeferredExternalSync(): void {
-		if (!this.externalSyncPending) {
+	flushDeferredBackgroundSync(): void {
+		if (!this.backgroundSyncPending) {
 			return;
 		}
 
-		void this.syncFromStorage({ external: true });
+		void this.syncFromStorage();
 	}
 
-	private shouldDeferExternalSync(): boolean {
+	private shouldDeferBackgroundSync(): boolean {
 		if (this.draftThreads.size > 0 || this.pendingBodies.size > 0) {
 			return true;
 		}
@@ -194,17 +192,6 @@ export class ReviewCommentController implements vscode.Disposable {
 		}
 
 		return false;
-	}
-
-	private scheduleExternalSyncFromStorage(): void {
-		if (this.externalSyncTimer) {
-			clearTimeout(this.externalSyncTimer);
-		}
-
-		this.externalSyncTimer = setTimeout(() => {
-			this.externalSyncTimer = undefined;
-			void this.syncFromStorage({ external: true });
-		}, EXTERNAL_SYNC_IDLE_MS);
 	}
 
 	hasCommentsForUri(uri: vscode.Uri): boolean {
@@ -246,8 +233,49 @@ export class ReviewCommentController implements vscode.Disposable {
 			}
 
 			this.syncedRanges.set(storageId, next);
-			uiThread.range = reviewRangeToRange(next);
-			uiThread.label = formatFileRange(relativePath, next);
+			changed = true;
+		}
+
+		if (changed) {
+			this.scheduleUiRangeRefresh(relativePath);
+		}
+	}
+
+	private scheduleUiRangeRefresh(relativePath: string): void {
+		const existing = this.uiRangeRefreshTimers.get(relativePath);
+		if (existing) {
+			clearTimeout(existing);
+		}
+
+		this.uiRangeRefreshTimers.set(
+			relativePath,
+			setTimeout(() => {
+				this.uiRangeRefreshTimers.delete(relativePath);
+				this.flushUiRangeRefresh(relativePath);
+			}, UI_RANGE_REFRESH_DELAY_MS),
+		);
+	}
+
+	private flushUiRangeRefresh(relativePath: string): void {
+		const storageIds = this.threadIdsByFile.get(relativePath);
+		if (!storageIds?.size) {
+			return;
+		}
+
+		let changed = false;
+		for (const storageId of storageIds) {
+			const uiThread = this.uiThreads.get(storageId);
+			const range = this.syncedRanges.get(storageId);
+			if (!uiThread || !range) {
+				continue;
+			}
+
+			const next = reviewRangeToRange(range);
+			if (uiThread.range?.isEqual(next)) {
+				continue;
+			}
+
+			uiThread.range = next;
 			changed = true;
 		}
 
@@ -724,6 +752,10 @@ export class ReviewCommentController implements vscode.Disposable {
 			return;
 		}
 
+		if (this.threadFullyMatchesStorage(uiThread, thread)) {
+			return;
+		}
+
 		this.applyThreadMetadata(uiThread, thread);
 
 		if (!this.uiMatchesStorage(uiThread, thread)) {
@@ -767,13 +799,54 @@ export class ReviewCommentController implements vscode.Disposable {
 		return true;
 	}
 
-	private applyThreadMetadata(uiThread: vscode.CommentThread, thread: ReviewThread): void {
-		uiThread.contextValue = thread.resolved ? 'resolved' : 'open';
-		uiThread.state = thread.resolved
+	private threadFullyMatchesStorage(
+		uiThread: vscode.CommentThread,
+		thread: ReviewThread,
+	): boolean {
+		const synced = this.syncedRanges.get(thread.id);
+		if (!synced || !rangesEqual(synced, thread.range)) {
+			return false;
+		}
+
+		if (!this.uiMatchesStorage(uiThread, thread)) {
+			return false;
+		}
+
+		const contextValue = thread.resolved ? 'resolved' : 'open';
+		const state = thread.resolved
 			? vscode.CommentThreadState.Resolved
 			: vscode.CommentThreadState.Unresolved;
-		uiThread.label = formatLocation(thread);
-		uiThread.canReply = !thread.resolved;
+		const label = formatLocation(thread);
+
+		return (
+			uiThread.contextValue === contextValue &&
+			uiThread.state === state &&
+			uiThread.label === label &&
+			uiThread.canReply === !thread.resolved
+		);
+	}
+
+	private applyThreadMetadata(uiThread: vscode.CommentThread, thread: ReviewThread): void {
+		const contextValue = thread.resolved ? 'resolved' : 'open';
+		const state = thread.resolved
+			? vscode.CommentThreadState.Resolved
+			: vscode.CommentThreadState.Unresolved;
+		const label = formatLocation(thread);
+		const canReply = !thread.resolved;
+
+		if (
+			uiThread.contextValue === contextValue &&
+			uiThread.state === state &&
+			uiThread.label === label &&
+			uiThread.canReply === canReply
+		) {
+			return;
+		}
+
+		uiThread.contextValue = contextValue;
+		uiThread.state = state;
+		uiThread.label = label;
+		uiThread.canReply = canReply;
 	}
 
 	private setUiComments(uiThread: vscode.CommentThread, thread: ReviewThread): void {

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ExtensionModule } from '../../module';
-import { REVIEW_CONFIG_SECTION } from './config';
+import { REVIEW_CONFIG_SECTION, isReviewStorageUri } from './config';
 import { ReviewCommentController } from './comments';
 import {
 	copyAllComments,
@@ -14,7 +14,7 @@ import {
 } from './fileActions';
 import { ReviewStorage } from './storage';
 import { registerStorageWatchers } from './storageWatcher';
-import { scheduleStartupRetries, whenWorkspaceReady } from './workspaceReady';
+import { whenWorkspaceReady } from './workspaceReady';
 
 export class ReviewModule implements ExtensionModule {
 	private readonly storage = new ReviewStorage();
@@ -24,18 +24,18 @@ export class ReviewModule implements ExtensionModule {
 		this.commentController = new ReviewCommentController(this.storage);
 		this.commentController.registerCommands(context);
 
-		const syncComments = (options?: { external?: boolean; force?: boolean }) => {
+		const syncComments = (options?: { force?: boolean }) => {
 			if (this.commentController?.isMutatingStorage()) {
 				return;
 			}
 
 			void (async () => {
 				if (!this.commentController?.isActivated()) {
-					await this.commentController?.bootstrap();
+					await this.commentController?.bootstrap(options);
 					return;
 				}
 
-				await this.commentController.syncFromStorage(options);
+				await this.commentController.syncFromStorage(options?.force ? { force: true } : {});
 			})();
 		};
 
@@ -49,13 +49,13 @@ export class ReviewModule implements ExtensionModule {
 			}
 
 			this.storage.invalidateFolder(workspaceFolder);
-			syncComments({ external: true });
+			syncComments();
 		};
 
-		const bootstrapReview = (revealPanel = false) => {
+		const bootstrapReview = () => {
 			void (async () => {
 				await whenWorkspaceReady();
-				await this.commentController?.bootstrap({ revealPanel });
+				await this.commentController?.bootstrap();
 			})();
 		};
 
@@ -68,13 +68,13 @@ export class ReviewModule implements ExtensionModule {
 			vscode.workspace.onDidChangeWorkspaceFolders(() => {
 				this.storage.clearCache();
 				storageWatchers.reattach();
-				bootstrapReview(true);
+				bootstrapReview();
 			}),
 			vscode.workspace.onDidChangeConfiguration((event) => {
 				if (event.affectsConfiguration(`${REVIEW_CONFIG_SECTION}.storagePath`)) {
 					this.storage.clearCache();
 					storageWatchers.reattach();
-					bootstrapReview(true);
+					bootstrapReview();
 				}
 			}),
 			vscode.workspace.onDidChangeTextDocument((event) => {
@@ -88,9 +88,18 @@ export class ReviewModule implements ExtensionModule {
 
 				this.commentController.handleDocumentChange(event);
 			}),
-			scheduleStartupRetries(() => bootstrapReview(true)),
 			vscode.window.onDidChangeActiveTextEditor(() => {
-				this.commentController?.flushDeferredExternalSync();
+				if (!this.commentController?.hasPendingBackgroundSync()) {
+					return;
+				}
+
+				const editor = vscode.window.activeTextEditor;
+				const inCodeEditor =
+					editor?.document.uri.scheme === 'file' &&
+					!isReviewStorageUri(editor.document.uri);
+				if (!inCodeEditor) {
+					this.commentController.flushDeferredBackgroundSync();
+				}
 			}),
 			vscode.commands.registerCommand('zce.review.add', () => this.addComment()),
 			vscode.commands.registerCommand('zce.review.copyAsMarkdown', () =>
@@ -110,23 +119,28 @@ export class ReviewModule implements ExtensionModule {
 					),
 			),
 			vscode.commands.registerCommand('zce.review.deleteFileComments', (resource?: vscode.Uri) =>
-				this.runForFile(resource, (file) => deleteFileCommentsForPath(this.storage, file)),
+				this.runForFile(resource, (file) => deleteFileCommentsForPath(this.storage, file), true),
 			),
 			vscode.commands.registerCommand(
 				'zce.review.deleteResolvedFileComments',
 				(resource?: vscode.Uri) =>
-					this.runForFile(resource, (file) =>
-						deleteResolvedFileCommentsForPath(this.storage, file),
+					this.runForFile(
+						resource,
+						(file) => deleteResolvedFileCommentsForPath(this.storage, file),
+						true,
 					),
 			),
-			vscode.commands.registerCommand('zce.review.deleteAllResolvedComments', () =>
-				deleteAllResolvedComments(this.storage),
-			),
+			vscode.commands.registerCommand('zce.review.deleteAllResolvedComments', async () => {
+				await deleteAllResolvedComments(this.storage);
+				await this.commentController?.syncFromStorage({ force: true });
+			}),
 			vscode.commands.registerCommand('zce.review.resolveFileComments', (resource?: vscode.Uri) =>
-				this.runForFile(resource, (file) => resolveFileCommentsForPath(this.storage, file)),
+				this.runForFile(resource, (file) => resolveFileCommentsForPath(this.storage, file), true),
 			),
 			vscode.commands.registerCommand('zce.review.refresh', () => this.refreshComments()),
 		);
+
+		bootstrapReview();
 	}
 
 	deactivate(): void {
@@ -175,6 +189,7 @@ export class ReviewModule implements ExtensionModule {
 	private async runForFile(
 		resource: vscode.Uri | undefined,
 		action: (relativePath: string) => Promise<unknown>,
+		syncAfter = false,
 	): Promise<void> {
 		const uri = this.resolveTargetUri(resource);
 		if (!uri) {
@@ -183,5 +198,9 @@ export class ReviewModule implements ExtensionModule {
 		}
 
 		await action(this.storage.toRelativePath(uri));
+
+		if (syncAfter) {
+			await this.commentController?.syncFromStorage({ force: true });
+		}
 	}
 }
