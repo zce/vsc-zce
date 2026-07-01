@@ -11,6 +11,9 @@
   "engines": {
     "vscode": "^1.105.0"
   },
+  "enabledApiProposals": [
+    "contribCommentsViewThreadMenus"
+  ],
   "categories": [
     "Other"
   ],
@@ -232,6 +235,48 @@
         {
           "command": "zce.review.deleteThread",
           "group": "navigation@3",
+          "when": "commentController == zce.review && !commentThreadIsEmpty"
+        }
+      ],
+      "commentsView/commentThread/context": [
+        {
+          "command": "zce.review.copyThreadAsMarkdown",
+          "group": "context@1",
+          "when": "commentController == zce.review && !commentThreadIsEmpty"
+        },
+        {
+          "command": "zce.review.resolveThread",
+          "group": "context@2",
+          "when": "commentController == zce.review && commentThread == open"
+        },
+        {
+          "command": "zce.review.unresolveThread",
+          "group": "context@2",
+          "when": "commentController == zce.review && commentThread == resolved"
+        },
+        {
+          "command": "zce.review.deleteThread",
+          "group": "context@3",
+          "when": "commentController == zce.review && !commentThreadIsEmpty"
+        },
+        {
+          "command": "zce.review.copyThreadAsMarkdown",
+          "group": "inline@1",
+          "when": "commentController == zce.review && !commentThreadIsEmpty"
+        },
+        {
+          "command": "zce.review.resolveThread",
+          "group": "inline@2",
+          "when": "commentController == zce.review && commentThread == open"
+        },
+        {
+          "command": "zce.review.unresolveThread",
+          "group": "inline@2",
+          "when": "commentController == zce.review && commentThread == resolved"
+        },
+        {
+          "command": "zce.review.deleteThread",
+          "group": "inline@3",
           "when": "commentController == zce.review && !commentThreadIsEmpty"
         }
       ],
