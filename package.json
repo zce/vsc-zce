@@ -11,9 +11,6 @@
   "engines": {
     "vscode": "^1.105.0"
   },
-  "enabledApiProposals": [
-    "contribCommentsViewThreadMenus"
-  ],
   "categories": [
     "Other"
   ],
@@ -31,6 +28,23 @@
           "markdownDescription": "Path to the review comments JSON file. Relative paths are resolved from the workspace folder root."
         }
       }
+    },
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "zce.reviewPanel",
+          "title": "Review",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "zce.reviewPanel": [
+        {
+          "id": "zce.reviewView",
+          "name": "Comments"
+        }
+      ]
     },
     "commands": [
       {
@@ -71,7 +85,8 @@
       {
         "command": "zce.review.copyUnresolvedAsMarkdown",
         "title": "Copy Unresolved",
-        "category": "ZCE Review"
+        "category": "ZCE Review",
+        "icon": "$(copy)"
       },
       {
         "command": "zce.review.copyFileAsMarkdown",
@@ -96,7 +111,8 @@
       {
         "command": "zce.review.deleteAllResolvedComments",
         "title": "Delete Resolved",
-        "category": "ZCE Review"
+        "category": "ZCE Review",
+        "icon": "$(trash)"
       },
       {
         "command": "zce.review.resolveFileComments",
@@ -106,7 +122,8 @@
       {
         "command": "zce.review.refresh",
         "title": "Refresh",
-        "category": "ZCE Review"
+        "category": "ZCE Review",
+        "icon": "$(refresh)"
       },
       {
         "command": "zce.review.submit",
@@ -150,6 +167,58 @@
       {
         "command": "zce.review.deleteThread",
         "title": "Delete",
+        "category": "ZCE Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "zce.review.view.copyThread",
+        "title": "Copy",
+        "category": "ZCE Review",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "zce.review.view.resolveThread",
+        "title": "Resolve",
+        "category": "ZCE Review",
+        "icon": "$(check)"
+      },
+      {
+        "command": "zce.review.view.unresolveThread",
+        "title": "Unresolve",
+        "category": "ZCE Review",
+        "icon": "$(issues)"
+      },
+      {
+        "command": "zce.review.view.deleteThread",
+        "title": "Delete",
+        "category": "ZCE Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "zce.review.view.copyFile",
+        "title": "Copy All",
+        "category": "ZCE Review",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "zce.review.view.copyFileUnresolved",
+        "title": "Copy Unresolved",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.view.resolveFile",
+        "title": "Resolve All",
+        "category": "ZCE Review",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "zce.review.view.deleteResolvedFile",
+        "title": "Delete Resolved",
+        "category": "ZCE Review"
+      },
+      {
+        "command": "zce.review.view.deleteFile",
+        "title": "Delete All",
         "category": "ZCE Review",
         "icon": "$(trash)"
       }
@@ -275,48 +344,6 @@
           "when": "commentController == zce.review && !commentThreadIsEmpty"
         }
       ],
-      "commentsView/commentThread/context": [
-        {
-          "command": "zce.review.copyThreadAsMarkdown",
-          "group": "context@1",
-          "when": "commentController == zce.review && !commentThreadIsEmpty"
-        },
-        {
-          "command": "zce.review.resolveThread",
-          "group": "context@2",
-          "when": "commentController == zce.review && commentThread == open"
-        },
-        {
-          "command": "zce.review.unresolveThread",
-          "group": "context@2",
-          "when": "commentController == zce.review && commentThread == resolved"
-        },
-        {
-          "command": "zce.review.deleteThread",
-          "group": "context@3",
-          "when": "commentController == zce.review && !commentThreadIsEmpty"
-        },
-        {
-          "command": "zce.review.copyThreadAsMarkdown",
-          "group": "inline@1",
-          "when": "commentController == zce.review && !commentThreadIsEmpty"
-        },
-        {
-          "command": "zce.review.resolveThread",
-          "group": "inline@2",
-          "when": "commentController == zce.review && commentThread == open"
-        },
-        {
-          "command": "zce.review.unresolveThread",
-          "group": "inline@2",
-          "when": "commentController == zce.review && commentThread == resolved"
-        },
-        {
-          "command": "zce.review.deleteThread",
-          "group": "inline@3",
-          "when": "commentController == zce.review && !commentThreadIsEmpty"
-        }
-      ],
       "comments/commentThread/context": [
         {
           "command": "zce.review.submit",
@@ -346,6 +373,95 @@
           "command": "zce.review.cancelEdit",
           "group": "inline@2",
           "when": "commentController == zce.review"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "zce.review.copyUnresolvedAsMarkdown",
+          "when": "view == zce.reviewView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zce.review.refresh",
+          "when": "view == zce.reviewView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "zce.review.deleteAllResolvedComments",
+          "when": "view == zce.reviewView",
+          "group": "1_cleanup@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "zce.review.view.resolveFile",
+          "when": "view == zce.reviewView && viewItem == reviewFileOpen",
+          "group": "inline@1"
+        },
+        {
+          "command": "zce.review.view.copyThread",
+          "when": "view == zce.reviewView && (viewItem == reviewThreadOpen || viewItem == reviewThreadResolved)",
+          "group": "inline@1"
+        },
+        {
+          "command": "zce.review.view.resolveThread",
+          "when": "view == zce.reviewView && viewItem == reviewThreadOpen",
+          "group": "inline@2"
+        },
+        {
+          "command": "zce.review.view.unresolveThread",
+          "when": "view == zce.reviewView && viewItem == reviewThreadResolved",
+          "group": "inline@2"
+        },
+        {
+          "command": "zce.review.view.deleteThread",
+          "when": "view == zce.reviewView && (viewItem == reviewThreadOpen || viewItem == reviewThreadResolved)",
+          "group": "inline@3"
+        },
+        {
+          "command": "zce.review.view.copyFile",
+          "when": "view == zce.reviewView && (viewItem == reviewFileOpen || viewItem == reviewFileResolved)",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "zce.review.view.copyFileUnresolved",
+          "when": "view == zce.reviewView && viewItem == reviewFileOpen",
+          "group": "1_copy@2"
+        },
+        {
+          "command": "zce.review.view.resolveFile",
+          "when": "view == zce.reviewView && viewItem == reviewFileOpen",
+          "group": "2_state@1"
+        },
+        {
+          "command": "zce.review.view.copyThread",
+          "when": "view == zce.reviewView && (viewItem == reviewThreadOpen || viewItem == reviewThreadResolved)",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "zce.review.view.resolveThread",
+          "when": "view == zce.reviewView && viewItem == reviewThreadOpen",
+          "group": "2_state@1"
+        },
+        {
+          "command": "zce.review.view.unresolveThread",
+          "when": "view == zce.reviewView && viewItem == reviewThreadResolved",
+          "group": "2_state@1"
+        },
+        {
+          "command": "zce.review.view.deleteResolvedFile",
+          "when": "view == zce.reviewView && (viewItem == reviewFileOpen || viewItem == reviewFileResolved)",
+          "group": "3_delete@1"
+        },
+        {
+          "command": "zce.review.view.deleteFile",
+          "when": "view == zce.reviewView && (viewItem == reviewFileOpen || viewItem == reviewFileResolved)",
+          "group": "3_delete@2"
+        },
+        {
+          "command": "zce.review.view.deleteThread",
+          "when": "view == zce.reviewView && (viewItem == reviewThreadOpen || viewItem == reviewThreadResolved)",
+          "group": "3_delete@1"
         }
       ],
       "commandPalette": [
@@ -379,6 +495,42 @@
         },
         {
           "command": "zce.review.deleteThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.copyThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.resolveThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.unresolveThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.deleteThread",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.copyFile",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.copyFileUnresolved",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.resolveFile",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.deleteResolvedFile",
+          "when": "false"
+        },
+        {
+          "command": "zce.review.view.deleteFile",
           "when": "false"
         }
       ]
