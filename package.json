@@ -42,7 +42,8 @@
       "zce-review-panel": [
         {
           "id": "zce.reviewView",
-          "name": "Comments"
+          "name": "Comments",
+          "icon": "icon.png"
         }
       ]
     },
