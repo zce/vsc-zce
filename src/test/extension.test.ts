@@ -2,6 +2,19 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { createDotnetCommands } from '../modules/dotnet';
 
+suite('Extension activation', () => {
+	test('activates and registers review commands', async () => {
+		const extension = vscode.extensions.getExtension('zce.zce');
+		assert.ok(extension, 'zce.zce extension should be available');
+
+		await extension.activate();
+
+		const commands = await vscode.commands.getCommands(true);
+		assert.ok(commands.includes('zce.review.add'));
+		assert.ok(commands.includes('zce.review.refresh'));
+	});
+});
+
 suite('Dotnet Folder Commands', () => {
 	test('uses selected folder when it already contains a .csproj', async () => {
 		const selectedFolder = vscode.Uri.file('C:/repo/src/App');

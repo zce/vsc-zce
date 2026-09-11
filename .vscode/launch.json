@@ -6,9 +6,22 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Run Extension",
+			"name": "Debug Extension",
 			"type": "extensionHost",
 			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}"
+			],
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"preLaunchTask": "${defaultBuildTask}"
+		},
+		{
+			"name": "Run Extension (No Debug)",
+			"type": "extensionHost",
+			"request": "launch",
+			"noDebug": true,
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
