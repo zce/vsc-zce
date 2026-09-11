@@ -32,14 +32,14 @@
     "viewsContainers": {
       "panel": [
         {
-          "id": "zce.reviewPanel",
+          "id": "zce-review-panel",
           "title": "Review",
           "icon": "icon.png"
         }
       ]
     },
     "views": {
-      "zce.reviewPanel": [
+      "zce-review-panel": [
         {
           "id": "zce.reviewView",
           "name": "Comments"
