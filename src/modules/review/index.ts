@@ -33,7 +33,6 @@ export class ReviewModule implements ExtensionModule {
 
 			await this.commentController.syncFromStorage({ force: true });
 		});
-		this.reviewView.register(context);
 
 		const syncComments = (options?: { force?: boolean }) => {
 			if (this.commentController?.isMutatingStorage()) {
@@ -154,6 +153,14 @@ export class ReviewModule implements ExtensionModule {
 			),
 			vscode.commands.registerCommand('zce.review.refresh', () => this.refreshComments()),
 		);
+
+		try {
+			this.reviewView.register(context);
+		} catch (error) {
+			console.error('Failed to register ZCE Review view:', error);
+			this.reviewView.dispose();
+			this.reviewView = undefined;
+		}
 
 		bootstrapReview();
 	}
